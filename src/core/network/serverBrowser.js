@@ -25,6 +25,16 @@ import {
   setP2PPending,
   setP2PError
 } from "../../state/serverBrowser.js";
+const CANDIDATE_PUSH_MIN_INTERVAL_MS = 1000;
+
+let lastHostCandidatePushAt = 0;
+let lastJoinCandidatePushAt = 0;
+let lastSentHostCandidates = [];
+let lastSentJoinCandidates = [];
+let pendingHostCandidateTimeout = null;
+let pendingJoinCandidateTimeout = null;
+let pendingJoinCandidatePayload = null;
+
 
 function getApiBase() {
   return (NETWORK_CONFIG.serverApiBase ?? "").replace(/\/$/, "");
@@ -84,6 +94,159 @@ function normalizeCandidateList(list) {
     .filter((candidate) => candidate.length > 0);
 }
 
+function arraysEqual(a = [], b = []) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function mapServerEntry(server) {
+  if (!server || typeof server !== "object") {
+    return null;
+  }
+  const metadata = server.metadata ?? {};
+  return {
+    id: server.id,
+    name: server.name ?? server.id,
+    map: server.map ?? metadata.map ?? "Unknown",
+    players: metadata.playerCount ?? server.playerCount ?? server.players ?? 0,
+    maxPlayers: server.maxPlayers ?? metadata.maxPlayers ?? 0,
+    region: server.region ?? metadata.region ?? "--",
+    mode: server.mode ?? metadata.mode ?? "",
+    enemyCount: metadata.enemyCount ?? null,
+    alliesCount: metadata.alliesCount ?? null,
+    updatedAt: server.updatedAt ?? null,
+    signal: {
+      hostOffer: server.signal?.hostOffer ?? null,
+      hostCandidates: Array.isArray(server.signal?.hostCandidates) ? server.signal.hostCandidates.slice() : [],
+      joinAnswer: server.signal?.joinAnswer ?? null,
+      joinCandidates: Array.isArray(server.signal?.joinCandidates) ? server.signal.joinCandidates.slice() : []
+    }
+  };
+}
+
+function cacheUpdatedSession(server) {
+  const mapped = mapServerEntry(server);
+  if (!mapped) {
+    return;
+  }
+  const state = getServerBrowserState();
+  const index = state.servers.findIndex((entry) => entry.id === mapped.id);
+  if (index >= 0) {
+    state.servers[index] = mapped;
+  } else {
+    state.servers.push(mapped);
+  }
+}
+
+function resetCandidateTracking() {
+  lastSentHostCandidates = [];
+  lastSentJoinCandidates = [];
+  lastHostCandidatePushAt = 0;
+  lastJoinCandidatePushAt = 0;
+  if (pendingHostCandidateTimeout) {
+    clearTimeout(pendingHostCandidateTimeout);
+    pendingHostCandidateTimeout = null;
+  }
+  if (pendingJoinCandidateTimeout) {
+    clearTimeout(pendingJoinCandidateTimeout);
+    pendingJoinCandidateTimeout = null;
+  }
+  pendingJoinCandidatePayload = null;
+}
+
+function scheduleHostCandidatePush() {
+  const state = getServerBrowserState();
+  if (!state.hosting || !state.hostingSessionId) {
+    return;
+  }
+  const now = Date.now();
+  const delay = Math.max(0, CANDIDATE_PUSH_MIN_INTERVAL_MS - (now - lastHostCandidatePushAt));
+  if (delay > 0) {
+    if (!pendingHostCandidateTimeout) {
+      pendingHostCandidateTimeout = setTimeout(() => {
+        pendingHostCandidateTimeout = null;
+        pushHostCandidatesNow();
+      }, delay);
+    }
+    return;
+  }
+  pushHostCandidatesNow();
+}
+
+function pushHostCandidatesNow() {
+  const state = getServerBrowserState();
+  if (!state.hosting || !state.hostingSessionId) {
+    return;
+  }
+  lastHostCandidatePushAt = Date.now();
+  heartbeatSession().catch((error) => console.warn("[serverBrowser] heartbeat update failed", error));
+}
+
+function scheduleJoinerCandidatePush(candidates) {
+  const state = getServerBrowserState();
+  if (!state.joinedSessionId || !Array.isArray(candidates) || candidates.length === 0) {
+    return;
+  }
+  const now = Date.now();
+  const delay = Math.max(0, CANDIDATE_PUSH_MIN_INTERVAL_MS - (now - lastJoinCandidatePushAt));
+  if (delay > 0) {
+    pendingJoinCandidatePayload = candidates.slice();
+    if (!pendingJoinCandidateTimeout) {
+      pendingJoinCandidateTimeout = setTimeout(() => {
+        const payload = pendingJoinCandidatePayload;
+        pendingJoinCandidateTimeout = null;
+        pendingJoinCandidatePayload = null;
+        pushJoinerCandidatesNow(payload);
+      }, delay);
+    }
+    return;
+  }
+  pushJoinerCandidatesNow(candidates);
+}
+
+function pushJoinerCandidatesNow(candidates) {
+  const state = getServerBrowserState();
+  if (!state.joinedSessionId || !Array.isArray(candidates) || candidates.length === 0) {
+    return;
+  }
+  lastJoinCandidatePushAt = Date.now();
+  postJoinerUpdate(state.joinedSessionId, { signalCandidates: candidates }).catch((error) => {
+    console.warn("[serverBrowser] failed to publish joiner candidates", error);
+  });
+}
+
+function handleLocalCandidateUpdate(candidates) {
+  const state = getServerBrowserState();
+  if (!state.hosting) {
+    lastSentHostCandidates = [];
+  }
+  if (!state.joinedSessionId) {
+    lastSentJoinCandidates = [];
+  }
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    if (!state.hosting && !state.joinedSessionId) {
+      resetCandidateTracking();
+      setJoinedSessionId(null);
+    }
+    return;
+  }
+  if (state.hosting && state.hostingSessionId && !arraysEqual(lastSentHostCandidates, candidates)) {
+    lastSentHostCandidates = candidates.slice();
+    scheduleHostCandidatePush();
+  }
+  if (state.joinedSessionId && !arraysEqual(lastSentJoinCandidates, candidates)) {
+    lastSentJoinCandidates = candidates.slice();
+    scheduleJoinerCandidatePush(candidates.slice());
+  }
+}
+
 async function fetchSessionDetail(serverId) {
   const apiBase = getApiBase();
   if (!apiBase) {
@@ -105,21 +268,33 @@ async function fetchSessionDetail(serverId) {
 }
 
 function syncLocalCandidates() {
+  const state = getServerBrowserState();
   let p2p;
   try {
     p2p = getP2P();
   } catch {
-    setP2PLocalCandidates([]);
+    if ((state.p2p?.localCandidates ?? []).length > 0) {
+      setP2PLocalCandidates([]);
+      handleLocalCandidateUpdate([]);
+    }
     return [];
   }
   if (!p2p?.getLocalCandidates) {
-    setP2PLocalCandidates([]);
+    if ((state.p2p?.localCandidates ?? []).length > 0) {
+      setP2PLocalCandidates([]);
+      handleLocalCandidateUpdate([]);
+    }
     return [];
   }
+  const previous = Array.isArray(state.p2p?.localCandidates) ? state.p2p.localCandidates.slice() : [];
   const normalized = normalizeCandidateList(p2p.getLocalCandidates() ?? []);
-  setP2PLocalCandidates(normalized);
+  if (!arraysEqual(previous, normalized)) {
+    setP2PLocalCandidates(normalized);
+    handleLocalCandidateUpdate(normalized);
+  }
   return normalized;
 }
+
 
 function parseCandidateInput(rawInput) {
   const sanitized = sanitizeSignal(rawInput);
@@ -242,7 +417,7 @@ function buildHostingMetadata(metrics, fallbackPlayerCount) {
   };
 }
 
-async function fetchServerList() {
+async function fetchServerList({ silent = false } = {}) {
   const apiBase = getApiBase();
   if (!apiBase) {
     setError("Server list URL not configured");
@@ -250,7 +425,9 @@ async function fetchServerList() {
     return;
   }
   setFetching(true);
-  setStatusMessage("Fetching server list...");
+  if (!silent) {
+    setStatusMessage("Fetching server list...");
+  }
   try {
     const response = await fetch(`${apiBase}/sessions`, {
       headers: { Accept: "application/json" }
@@ -260,27 +437,9 @@ async function fetchServerList() {
     }
     const data = await response.json();
     const servers = Array.isArray(data) ? data : Array.isArray(data?.servers) ? data.servers : [];
-    const mappedServers = servers.map((server) => {
-      const metadata = server.metadata ?? {};
-      return {
-        id: server.id,
-        name: server.name ?? server.id,
-        map: server.map ?? metadata.map ?? "Unknown",
-        players: metadata.playerCount ?? server.playerCount ?? server.players ?? 0,
-        maxPlayers: server.maxPlayers ?? metadata.maxPlayers ?? 0,
-        region: server.region ?? metadata.region ?? "--",
-        mode: server.mode ?? metadata.mode ?? "",
-        enemyCount: metadata.enemyCount ?? null,
-        alliesCount: metadata.alliesCount ?? null,
-        updatedAt: server.updatedAt ?? null,
-        signal: {
-          hostOffer: server.signal?.hostOffer ?? null,
-          hostCandidates: Array.isArray(server.signal?.hostCandidates) ? server.signal.hostCandidates.slice() : [],
-          joinAnswer: server.signal?.joinAnswer ?? null,
-          joinCandidates: Array.isArray(server.signal?.joinCandidates) ? server.signal.joinCandidates.slice() : []
-        }
-      };
-    });
+    const mappedServers = servers
+      .map((server) => mapServerEntry(server))
+      .filter(Boolean);
     const staleThresholdMs = Math.max(30_000, Math.round((NETWORK_CONFIG.hostTtlSeconds ?? 150) * 1000 * 1.1));
     const now = Date.now();
     const filteredServers = mappedServers.filter((server) => {
@@ -295,15 +454,20 @@ async function fetchServerList() {
     });
     setServers(filteredServers);
     setError(null);
-    setStatusMessage(filteredServers.length === 0 ? "No active sessions." : "Fetched session list.");
+    if (!silent) {
+      setStatusMessage(filteredServers.length === 0 ? "No active sessions." : "Fetched session list.");
+    }
   } catch (error) {
     setServers([]);
     setError(`Failed to fetch servers: ${error.message}`);
-    setStatusMessage("Unable to reach session service.");
+    if (!silent) {
+      setStatusMessage("Unable to reach session service.");
+    }
   } finally {
     setFetching(false);
   }
 }
+
 async function hostSession({
   id = getSessionId(),
   name = NETWORK_CONFIG.hostName ?? "Stickman Lobby",
@@ -400,6 +564,7 @@ async function heartbeatSession() {
     console.warn("Heartbeat failed", error);
     setStatusMessage("Heartbeat failed; hosting paused.");
     clearHosting();
+    resetCandidateTracking();
   }
 }
 
@@ -409,6 +574,7 @@ async function stopHosting() {
   const state = getServerBrowserState();
   if (!state.hosting || !state.hostingSessionId || !apiBase || !secret) {
     clearHosting();
+    resetCandidateTracking();
     return;
   }
   try {
@@ -422,6 +588,7 @@ async function stopHosting() {
     console.warn("Failed to stop hosting", error);
   } finally {
     clearHosting();
+    resetCandidateTracking();
   }
 }
 
@@ -449,10 +616,45 @@ async function joinServer(serverId, payload = {}) {
   const result = await response.json();
   const joinedName = result?.session?.name ?? serverId;
   clearP2PState();
+  resetCandidateTracking();
+  cacheUpdatedSession(result?.session);
   setJoinStatus(`Joined ${joinedName}`);
-  setStatusMessage("Joined lobby. Press P to paste the host offer.");
+  setStatusMessage("Joined lobby. Establishing connection...");
   return result;
 }
+
+
+async function postJoinerUpdate(sessionId, payload = {}) {
+  const apiBase = getApiBase();
+  if (!apiBase || !sessionId) {
+    return;
+  }
+  if (!payload || Object.keys(payload).length === 0) {
+    return;
+  }
+  try {
+    const response = await fetch(`${apiBase}/sessions/${sessionId}/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const result = await response.json();
+    if (result?.session) {
+      cacheUpdatedSession(result.session);
+      if (Array.isArray(result.session.signal?.hostCandidates) && result.session.signal.hostCandidates.length > 0) {
+        applyRemoteCandidates(result.session.signal.hostCandidates);
+      }
+    }
+  } catch (error) {
+    console.warn(`[serverBrowser] joiner update failed for ${sessionId}`, error);
+  }
+}
+
 
 function showServerBrowser() {
   setVisible(true);
@@ -467,6 +669,17 @@ function hideServerBrowser() {
 function updateServerBrowser(delta, timestamp) {
   const state = getServerBrowserState();
   pumpSignalUpdates();
+  syncLocalCandidates();
+
+  const baseInterval = NETWORK_CONFIG.refreshIntervalMs ?? 10000;
+  const backgroundInterval = Math.min(baseInterval, 3000);
+  const refreshInterval = state.visible ? baseInterval : backgroundInterval;
+  const shouldPoll = state.visible || state.hosting || Boolean(state.joinedSessionId);
+  if (shouldPoll && timestamp - state.lastFetch >= refreshInterval && !state.fetching) {
+    recordFetchTimestamp(timestamp);
+    fetchServerList({ silent: !state.visible });
+  }
+
   if (!state.visible) {
     if (state.hosting) {
       const interval = NETWORK_CONFIG.heartbeatIntervalMs ?? 45000;
@@ -477,13 +690,6 @@ function updateServerBrowser(delta, timestamp) {
     return;
   }
 
-  syncLocalCandidates();
-
-  if (timestamp - state.lastFetch >= (NETWORK_CONFIG.refreshIntervalMs ?? 10000) && !state.fetching) {
-    recordFetchTimestamp(timestamp);
-    fetchServerList();
-  }
-
   if (state.hosting) {
     const interval = NETWORK_CONFIG.heartbeatIntervalMs ?? 45000;
     if (timestamp - state.hostingLastHeartbeat >= interval) {
@@ -492,6 +698,7 @@ function updateServerBrowser(delta, timestamp) {
   }
   pumpSignalUpdates();
 }
+
 
 async function ensureHostOffer({ forceRegenerate = false } = {}) {
   const state = getServerBrowserState();
@@ -702,6 +909,7 @@ function attemptHostSession() {
     return Promise.resolve({ alreadyHosting: true });
   }
   clearP2PState();
+  resetCandidateTracking();
   setJoinedSessionId(null);
   setStatusMessage("Preparing host offer...");
   setError(null);
@@ -798,7 +1006,7 @@ function attemptJoinSession(server) {
   return resolveSignal()
     .then(({ server: resolvedServer, signal }) => {
       clearP2PState();
-      setJoinedSessionId(null);
+      resetCandidateTracking();
       setJoinError(null);
       console.debug(`[serverBrowser] applying host offer for ${resolvedServer.id}`);
       setStatusMessage(`Connecting to ${resolvedServer.name ?? resolvedServer.id}...`);
@@ -879,6 +1087,10 @@ if (typeof window !== "undefined") {
 }
 
 export { setHostingMetrics } from "../../state/serverBrowser.js";
+
+
+
+
 
 
 
