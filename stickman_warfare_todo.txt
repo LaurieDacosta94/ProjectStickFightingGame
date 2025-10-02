@@ -1,0 +1,241 @@
+﻿# Stickman Warfare - Development To-Do List
+
+
+
+This file outlines an extensive roadmap for the project, divided into clear phases with numbered tasks.  
+
+The game is designed as a **2D browser-based JavaScript project with no backend** (frontend-only).  
+
+The final build will be compacted into a **single self-contained HTML file** using build tools.
+
+
+
+---
+
+
+
+## Phase 0: Tech Setup
+
+0.1 [x] Choose a core JavaScript game framework (custom Canvas 2D loop selected).  
+
+0.2 [x] Set up project structure with HTML/JS/CSS (index.html + styles.css + src/main.js).  
+
+0.3 [x] Configure build tools (Webpack + html-webpack-plugin setup).  
+
+0.4 [x] Implement bundling pipeline to export **a single self-contained HTML file** (post-build inline script outputs dist/stickman-warfare.html).  
+
+0.5 [x] Implement basic browser rendering (canvas scene with animated stickman).  
+
+0.6 [x] Test initial input handling (keyboard movement + jump).  
+
+0.7 [x] Set up local server for development and live testing (webpack-dev-server via `npm run dev` on port 5173).  
+
+
+
+---
+
+
+
+## Phase 1: Core Foundations
+
+1. [x] Define core gameplay loop (combat, movement, progression) (documented in docs/core_gameplay_loop.md).  
+
+2. [x] Implement basic stickman character model (**2D confirmed design**) (pose states for stand/crouch/roll rendered on canvas).  
+
+3. [x] Develop core movement system (run, jump, crouch, roll) with responsive input buffering and roll cooldown.  
+
+4. [x] Create basic melee combat mechanics (light attack combo with three-step timing window).  
+
+5. [x] Add basic health, damage, and death system (player hitboxes + training dummy respawn + enemy hits to player).  
+
+6. [x] Integrate simple ragdoll physics (player/enemy ragdoll pieces with timed fade).  
+
+7. [x] Implement debug arena for testing core mechanics (multi-platform collision playground).  
+
+
+
+---
+
+
+
+## Phase 2: Weapons & Gear
+
+8. [x] Design modular weapon system (equippable slots with weapon definitions).  
+
+9. [x] Add melee weapons (swords, bats, axes). (Shock Baton melee chain added alongside Combat Fists.)  
+
+10. [x] Add ranged weapons: pistols, SMGs, rifles, sniper rifles (basic pistol projectile prototype).  
+
+11. [x] Add throwable explosives (grenades, C4, flashbangs, smoke) (frag, flashbang, and smoke prototypes with cooldowns, HUD states, crowd-control, and lingering fields).  
+
+12. [x] Implement gadgets (jetpacks, grappling hooks, deployable turrets). (Turret sentry, grappling rig, and shield bubble wired into the shared gadget pipeline with HUD feedback and mitigation logic.)  
+
+13. [x] Build ammo and reloading system (stateful mags/reloads with HUD cues + debug polish hooks).  
+
+14. [x] Add recoil, spread, and projectile physics. (Striker Pistol now uses recoil kick + spread bloom with HUD feedback and decay.)  
+
+
+
+---
+
+
+
+## Phase 3: Vehicles & Support
+
+15. [x] Implement basic vehicle framework (enter/exit, control switching). (Player can now mount/dismount with E, with dedicated vehicle control loop.)  
+
+16. [x] Add land vehicles (cars, tanks, mechs). (Recon Buggy prototype available for testing in the arena.)  
+
+17. [x] Add air vehicles (helicopters, fighter jets, drones). (Helicopter, fighter, and drone mounts hovering with vertical controls.)  
+
+18. [x] Add water vehicles (boats, submarines). (Tide Skiff, Storm Barge, and Abyss Sub with buoyant controls and HUD hints.)  
+
+19. [x] Create mounted weapons (machine guns, rocket pods, flamethrowers). (Driver-controlled turrets added: barge chaingun, helicopter nose cannon, jet rocket pods, and skiff prow cannon.)  
+
+20. [x] Implement supply drop system (ammo, medkits, heavy weapons). (Timed airdrops deliver ammo caches, medkits, and the Thunder Cannon.)  
+
+
+
+---
+
+
+
+## Phase 4: Squad & AI
+
+21. [x] Implement simple enemy AI (patrol, chase, attack) (grunt prototype with chase + melee lunge).  
+
+22. [x] Add squadmate system with recruitable NPCs. (Three allied operatives follow commands with Attack/Defend/Hold/Flank behaviors.)  
+
+23. [x] Build squad command system (attack, defend, flank, hold). (Command wheel + hotkeys drive squad AI behaviors with live HUD status.)  
+
+24. [x] Optional: Implement peer-to-peer multiplayer (WebRTC, no backend). (Manual WebRTC handshake with state sync and remote avatar rendering.)  
+
+25. [x] Scale AI system to handle up to 100 participants. (Enemy spawner auto-fills waves to 100 with distance culling and optimized attack checks.)  
+
+
+
+---
+
+
+
+## Phase 5: Environments
+
+26. [x] Create first test map (urban environment). (Neo District layout with multi-tier streets, rooftops, and skyline décor.)  
+
+27. [x] Add destructible props (walls, cars, barrels). (Neo District now scatters destructible barriers, cars, and volatile barrel clusters with shared damage logic, chain explosions, and rubble visuals.)  
+
+28. [x] Implement explosion physics and debris effects. (Shared explosion impulse module now drives radial damage/knockback and spawns debris sprays on grenades, chain blasts, and destructible ruptures.)  
+
+29. [ ] Add dynamic lighting system (flashlights, explosions, tracer fire).  
+
+30. [ ] Add interactive objects (push crates, kick barrels, traps).  
+
+31. [ ] Expand to multiple environments (jungle, desert, sci-fi).  
+
+32. [ ] Implement player-built structures system (basic building framework).  
+
+33. [ ] Add defensive towers, barricades, and traps.  
+
+34. [ ] Add resource system for building (materials, salvage, drops).  
+
+35. [ ] Integrate build system into Survival Mode (base fortifications).  
+
+
+
+---
+
+
+
+## Phase 6: Game Modes
+
+36. [ ] Implement Story Campaign mode (basic missions).  
+
+37. [ ] Build Survival Mode (enemy waves).  
+
+38. [ ] Build Sandbox Skirmish mode with full arsenal.  
+
+39. [ ] Build Massive Co-Op mode (up to 100 players/NPCs).  
+
+
+
+---
+
+
+
+## Phase 7: Replayability & Polish
+
+40. [ ] Create custom loadout system.  
+
+41. [ ] Add cosmetic customization (helmets, armor, jetpacks).  
+
+42. [ ] Add scenario editor for player-made maps.  
+
+43. [ ] Optimize performance for large-scale battles.  
+
+44. [ ] Balance all weapons, gadgets, and vehicles.  
+
+45. [ ] Add sound effects and soundtrack.  
+
+46. [ ] Add particle FX (explosions, smoke, blood, sparks). (Event-driven muzzle, shield, and throwable bursts prototyped via placeholder particle/tonal system.)
+
+47. [ ] Improve UI/UX (menus, HUD, inventory).  
+
+
+
+---
+
+
+
+## Phase 8: Testing & Release
+
+48. [ ] Conduct internal alpha testing.  
+
+49. [ ] Run closed beta with limited players.  
+
+50. [ ] Collect feedback and fix critical bugs.  
+
+51. [ ] Optimize performance for large-scale battles.  
+
+52. [ ] Prepare promotional materials (trailer, screenshots).  
+
+53. [ ] Release v1.0 of Stickman Warfare as a **single self-contained HTML file**.  
+
+
+
+---
+
+
+
+## Long-Term Goals (Post-Release)
+
+54. [ ] Add new weapons and gadgets via updates.  
+
+55. [ ] Add new vehicles (experimental/sci-fi).  
+
+56. [ ] Expand campaign with new missions.  
+
+57. [ ] Support modding tools for the community.  
+
+58. [ ] Develop esports/competitive mode.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
