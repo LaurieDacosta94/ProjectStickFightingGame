@@ -14,6 +14,7 @@ import {
   recordFetchTimestamp,
   setFetching,
   setHostingSession,
+  setHostingMetrics,
   updateHostingHeartbeatTimestamp,
   clearHosting,
   clearP2PState,
@@ -878,6 +879,7 @@ if (typeof window !== "undefined") {
 }
 
 export { setHostingMetrics } from "../../state/serverBrowser.js";
+
 
 
 
