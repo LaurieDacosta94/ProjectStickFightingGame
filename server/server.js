@@ -6,6 +6,8 @@ const HOST_SECRET = process.env.SERVER_SECRET ?? "";
 const DEFAULT_TTL_SECONDS = 150;
 const MIN_TTL_SECONDS = 30;
 const MAX_TTL_SECONDS = 300;
+const MAX_SIGNAL_LENGTH = 16000;
+const MAX_SIGNAL_CANDIDATES = 32;
 
 const app = express();
 app.use(cors());
