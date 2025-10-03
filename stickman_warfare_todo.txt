@@ -1,4 +1,4 @@
-﻿# Stickman Warfare - Development To-Do List
+# Stickman Warfare - Development To-Do List
 
 
 
@@ -120,7 +120,7 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 ## Phase 5: Environments
 
-26. [x] Create first test map (urban environment). (Neo District layout with multi-tier streets, rooftops, and skyline décor.)  
+26. [x] Create first test map (urban environment). (Neo District layout with multi-tier streets, rooftops, and skyline d cor.)  
 
 27. [x] Add destructible props (walls, cars, barrels). (Neo District now scatters destructible barriers, cars, and volatile barrel clusters with shared damage logic, chain explosions, and rubble visuals.)  
 
@@ -146,39 +146,19 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 
 
-## Phase 6: Game Modes
+## Phase 6: Aiming & Animation Overhaul
 
-36. [ ] Implement Story Campaign mode (basic missions).  
+36. [ ] Implement universal 360-degree aiming system across players, squadmates, NPCs, and mounted entities with synchronized targeting states.  
 
-37. [ ] Build Survival Mode (enemy waves).  
+37. [ ] Map player aiming to mouse position (with controller fallback) including smoothing, dead zones, and sensitivity tuning.  
 
-38. [ ] Build Sandbox Skirmish mode with full arsenal.  
+38. [ ] Render equipped weapons in character hands with direction-aware flipping, depth layering, and visible weapon swapping.  
 
-39. [ ] Build Massive Co-Op mode (up to 100 players/NPCs).  
+39. [ ] Bind arm rigs to aim direction using IK/blend trees so limbs hold weapons correctly while aiming left or right.  
 
+40. [ ] Expand locomotion animations (idle, walk, run, crouch) to adapt leg poses to movement speed and direction changes.  
 
-
----
-
-
-
-## Phase 7: Replayability & Polish
-
-40. [ ] Create custom loadout system.  
-
-41. [ ] Add cosmetic customization (helmets, armor, jetpacks).  
-
-42. [ ] Add scenario editor for player-made maps.  
-
-43. [ ] Optimize performance for large-scale battles.  
-
-44. [ ] Balance all weapons, gadgets, and vehicles.  
-
-45. [ ] Add sound effects and soundtrack.  
-
-46. [ ] Add particle FX (explosions, smoke, blood, sparks). (Event-driven muzzle, shield, and throwable bursts prototyped via placeholder particle/tonal system.)
-
-47. [ ] Improve UI/UX (menus, HUD, inventory).  
+41. [ ] Create attack-specific arm animation sets (fists, melee, ranged) that blend with aim direction and combo timing.  
 
 
 
@@ -186,19 +166,77 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 
 
-## Phase 8: Testing & Release
+## Phase 7: Game Modes
 
-48. [ ] Conduct internal alpha testing.  
+42. [ ] Implement Story Campaign mode (basic missions).  
 
-49. [ ] Run closed beta with limited players.  
+43. [ ] Build Survival Mode (enemy waves).  
 
-50. [ ] Collect feedback and fix critical bugs.  
+44. [ ] Build Sandbox Skirmish mode with full arsenal.  
 
-51. [ ] Optimize performance for large-scale battles.  
+45. [ ] Build Massive Co-Op mode (up to 100 players/NPCs).  
 
-52. [ ] Prepare promotional materials (trailer, screenshots).  
 
-53. [ ] Release v1.0 of Stickman Warfare as a **single self-contained HTML file**.  
+
+---
+
+
+
+## Phase 8: UI & Frontend Flow
+
+46. [ ] Design and implement the main menu UI (branding, background, primary navigation).  
+
+47. [ ] Build Create Game / mode selection flow with campaign, survival, sandbox, and co-op configuration panels.  
+
+48. [ ] Wire up lobby/pre-game setup screens (loadouts, squad slots, difficulty) with local persistence.  
+
+49. [ ] Implement in-game clickable UI elements (context prompts, inventory, interaction overlays) supporting mouse and touch input.  
+
+50. [ ] Refresh in-game HUD and menus to reflect new aiming systems, weapon states, and contextual prompts.  
+
+
+
+---
+
+
+
+## Phase 9: Replayability & Polish
+
+51. [ ] Create custom loadout system.  
+
+52. [ ] Add cosmetic customization (helmets, armor, jetpacks).  
+
+53. [ ] Add scenario editor for player-made maps.  
+
+54. [ ] Optimize performance for large-scale battles.  
+
+55. [ ] Balance all weapons, gadgets, and vehicles.  
+
+56. [ ] Add sound effects and soundtrack.  
+
+57. [ ] Add particle FX (explosions, smoke, blood, sparks). (Event-driven muzzle, shield, and throwable bursts prototyped via placeholder particle/tonal system.)
+
+58. [ ] Improve UI/UX (menus, HUD, inventory).  
+
+
+
+---
+
+
+
+## Phase 10: Testing & Release
+
+59. [ ] Conduct internal alpha testing.  
+
+60. [ ] Run closed beta with limited players.  
+
+61. [ ] Collect feedback and fix critical bugs.  
+
+62. [ ] Optimize performance for large-scale battles.  
+
+63. [ ] Prepare promotional materials (trailer, screenshots).  
+
+64. [ ] Release v1.0 of Stickman Warfare as a **single self-contained HTML file**.  
 
 
 
@@ -208,15 +246,34 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 ## Long-Term Goals (Post-Release)
 
-54. [ ] Add new weapons and gadgets via updates.  
+65. [ ] Add new weapons and gadgets via updates.  
 
-55. [ ] Add new vehicles (experimental/sci-fi).  
+66. [ ] Add new vehicles (experimental/sci-fi).  
 
-56. [ ] Expand campaign with new missions.  
+67. [ ] Expand campaign with new missions.  
 
-57. [ ] Support modding tools for the community.  
+68. [ ] Support modding tools for the community.  
 
-58. [ ] Develop esports/competitive mode.  
+69. [ ] Develop esports/competitive mode.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
