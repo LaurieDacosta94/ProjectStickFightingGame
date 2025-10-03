@@ -1,15 +1,20 @@
-﻿import { DESTRUCTIBLE_TEMPLATES, DESTRUCTIBLE_SPAWNS } from "../config/destructibles.js";
+﻿import { DESTRUCTIBLE_TEMPLATES } from "../config/destructibles.js";
+import { getEnvironmentDestructibleSpawns, onEnvironmentChange } from "./environment.js";
 
 function createDestructibleFromSpawn(spawn) {
-  const template = DESTRUCTIBLE_TEMPLATES[spawn.type];
-  if (!template) {
+  const baseTemplate = DESTRUCTIBLE_TEMPLATES[spawn.type];
+  if (!baseTemplate) {
     throw new Error(`Unknown destructible template: ${spawn.type}`);
   }
 
-  const width = spawn.width ?? template.width;
-  const height = spawn.height ?? template.height;
+  const templateOverrides = spawn.templateOverrides ?? {};
+  const template = { ...baseTemplate, ...templateOverrides };
+  const width = spawn.width ?? template.width ?? baseTemplate.width;
+  const height = spawn.height ?? template.height ?? baseTemplate.height;
+  const halfWidth = width / 2;
+  const maxHealth = template.maxHealth ?? baseTemplate.maxHealth ?? 100;
 
-  return {
+  const destructible = {
     id: spawn.id,
     type: spawn.type,
     template,
@@ -17,9 +22,9 @@ function createDestructibleFromSpawn(spawn) {
     y: spawn.baseY,
     width,
     height,
-    halfWidth: width / 2,
-    health: template.maxHealth,
-    maxHealth: template.maxHealth,
+    halfWidth,
+    health: maxHealth,
+    maxHealth,
     destroyed: false,
     flashTimer: 0,
     shakeTimer: 0,
@@ -30,10 +35,16 @@ function createDestructibleFromSpawn(spawn) {
     facing: spawn.facing ?? 1,
     spawnConfig: { ...spawn }
   };
+
+  if (spawn.overrides && typeof spawn.overrides === "object") {
+    Object.assign(destructible, spawn.overrides);
+  }
+
+  return destructible;
 }
 
 function createInitialState() {
-  return DESTRUCTIBLE_SPAWNS.map((spawn) => createDestructibleFromSpawn(spawn));
+  return getEnvironmentDestructibleSpawns().map((spawn) => createDestructibleFromSpawn(spawn));
 }
 
 const destructibles = createInitialState();
@@ -53,5 +64,9 @@ function getDestructibles() {
 function getDestructibleById(id) {
   return destructibles.find((item) => item.id === id) ?? null;
 }
+
+onEnvironmentChange(() => {
+  resetDestructibles();
+});
 
 export { destructibles, getDestructibles, getDestructibleById, resetDestructibles };

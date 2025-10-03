@@ -1,4 +1,4 @@
-const input = Object.seal({
+﻿const input = Object.seal({
   left: false,
   right: false,
   jump: false,
@@ -21,7 +21,12 @@ const input = Object.seal({
   serverBrowserPasteOfferBuffered: false,
   serverBrowserAcceptAnswerBuffered: false,
   serverBrowserCopyCandidatesBuffered: false,
-  serverBrowserPasteCandidatesBuffered: false
+  serverBrowserPasteCandidatesBuffered: false,
+  buildToggleBuffered: false,
+  buildCycleBuffered: 0,
+  buildConfirmBuffered: false,
+  buildCancelBuffered: false,
+  survivalToggleBuffered: false,
 });
 
 let initialized = false;
@@ -49,10 +54,39 @@ function handleKey(isDown, event) {
       input.down = isDown;
       event.preventDefault();
       break;
+    case "Comma":
+      if (isDown) {
+        input.buildCycleBuffered = -1;
+        event.preventDefault();
+      }
+      break;
+    case "Period":
+      if (isDown) {
+        input.buildCycleBuffered = 1;
+        event.preventDefault();
+      }
+      break;
+    case "Escape":
+      if (isDown) {
+        input.buildCancelBuffered = true;
+        event.preventDefault();
+      }
     case "ShiftLeft":
     case "ShiftRight":
       if (isDown) {
         input.roll = true;
+        event.preventDefault();
+      }
+      break;
+    case "KeyB":
+      if (isDown) {
+        input.buildToggleBuffered = true;
+        event.preventDefault();
+      }
+      break;
+    case "KeyY":
+      if (isDown) {
+        input.survivalToggleBuffered = true;
         event.preventDefault();
       }
       break;

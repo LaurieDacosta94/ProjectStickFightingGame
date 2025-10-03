@@ -1,3 +1,4 @@
+import { addMaterials, spawnSalvagePickup } from "../../state/resources.js";
 
 import { canvas, GROUND_Y } from "../../environment/canvas.js";
 import { stickman, getTotalHeight } from "../../state/entities.js";
@@ -50,7 +51,10 @@ function spawnSupplyDrop(typeId) {
   const definition = SUPPLY_DROP_TYPES[typeId] ?? SUPPLY_DROP_TYPES.ammo;
   const width = 52;
   const height = 42;
-  const x = clamp(canvas.width * (0.2 + Math.random() * 0.6), width * 0.6, canvas.width - width * 0.6);
+  const envWidth = getEnvironmentWidth();
+  const clampedWidth = Math.max(width * 0.6, envWidth * 0.05);
+  const dropRange = Math.max(0, envWidth - clampedWidth * 2);
+  const x = clamp(envWidth * (0.2 + Math.random() * 0.6), clampedWidth, envWidth - clampedWidth);
   const spawnY = -SUPPLY_DROP_SETTINGS.spawnHeight;
   const drop = {
     id: `supply-${manager.dropSequence += 1}`,
@@ -121,6 +125,14 @@ function applySupplyDropReward(typeId) {
       break;
   }
   manager.rewardTimer = manager.rewardDuration;
+  const rewardType = SUPPLY_DROP_TYPES[typeId];
+  if (rewardType?.materialsReward) {
+    const immediateGain = Math.max(0, Math.round(rewardType.materialsReward * 0.7));
+    if (immediateGain > 0) {
+      addMaterials(immediateGain);
+      manager.rewardMessage = `${manager.rewardMessage} (+${immediateGain} materials)`;
+    }
+  }
 }
 
 function updateHighlight(drop, delta) {
@@ -145,10 +157,25 @@ function pickupDrop(drop) {
   drop.state = "collected";
   drop.despawnTimer = SUPPLY_DROP_SETTINGS.collectedFanfare;
   drop.highlight = 1;
+  const rewardMaterials = SUPPLY_DROP_TYPES[drop.typeId]?.materialsReward ?? 0;
+  if (rewardMaterials > 0) {
+    const salvagePortion = Math.max(0, Math.round(rewardMaterials * 0.3));
+    if (salvagePortion > 0) {
+      const chunks = Math.max(1, Math.round(salvagePortion / 12));
+      const amountPer = Math.max(1, Math.round(salvagePortion / chunks));
+      for (let i = 0; i < chunks; i += 1) {
+        const jitter = (Math.random() - 0.5) * 60;
+        spawnSalvagePickup({
+          x: drop.x + jitter,
+          y: drop.y,
+          amount: amountPer,
+          vy: -160 - Math.random() * 60
+        });
+      }
+    }
+  }
 }
-
 function updateSupplyDrops(delta) {
-  manager.nextDropTimer -= delta;
   if (manager.nextDropTimer <= 0 && supplyDrops.length < SUPPLY_DROP_SETTINGS.maxActiveDrops) {
     spawnSupplyDrop(manager.nextDropTypeId);
     scheduleNextDrop();
@@ -167,7 +194,8 @@ function updateSupplyDrops(delta) {
     if (drop.state === "descending") {
       drop.vy = Math.min(SUPPLY_DROP_SETTINGS.maxDescentSpeed, drop.vy + SUPPLY_DROP_SETTINGS.descentAcceleration * delta);
       drop.y += drop.vy * delta;
-      drop.x = clamp(drop.x + drop.vx * delta, drop.width * 0.5, canvas.width - drop.width * 0.5);
+      const envWidth = getEnvironmentWidth();
+      drop.x = clamp(drop.x + drop.vx * delta, drop.width * 0.5, envWidth - drop.width * 0.5);
       drop.parachutePhase += delta;
       if (drop.y >= GROUND_Y - drop.height) {
         drop.y = GROUND_Y - drop.height;
@@ -214,3 +242,4 @@ function getSupplyDropStatus() {
 }
 
 export { updateSupplyDrops, getSupplyDrops, getSupplyDropStatus };
+

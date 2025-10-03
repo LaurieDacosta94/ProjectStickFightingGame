@@ -3,6 +3,7 @@ import { getCurrentWeapon } from "./weapons.js";
 import { spawnProjectile } from "./projectiles.js";
 import { applyDamageToDummy, applyDamageToEnemy, applyDamageToPlayer } from "./damageHandlers.js";
 import { handleHitboxCollision } from "../world/destructibles.js";
+import { handleInteractableHitboxCollision } from "../world/interactables.js";
 import { consumeAmmo, startReload, registerShot } from "../../state/ammo.js";
 import { applyRecoil } from "../../state/recoil.js";
 
@@ -71,6 +72,7 @@ function resolveHitDetection() {
     }
 
     handleHitboxCollision(hitbox);
+    handleInteractableHitboxCollision(hitbox);
   }
 }
 

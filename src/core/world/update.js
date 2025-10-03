@@ -1,5 +1,7 @@
 import { SPEED, JUMP_SPEED, ROLL_SPEED, GRAVITY, POSES } from "../../config/constants.js";
 import { canvas, GROUND_Y } from "../../environment/canvas.js";
+import { getEnvironmentWidth } from "../../state/environment.js";
+import { setCameraTargetX, updateCamera } from "../../state/camera.js";
 import { input } from "../input/index.js";
 import { stickman, trainingDummy, enemies, getTotalHeight, getRemotePlayers, squadmates } from "../../state/entities.js";
 import { determinePose, startRoll, attemptAttack, advanceAttack } from "../combat/playerActions.js";
@@ -7,13 +9,18 @@ import { spawnHitbox, updateHitboxes, resolveHitDetection, fireEquippedWeaponPro
 import { throwEquippedWeapon, updateThrowables } from "../combat/throwables.js";
 import { deployGadget, updateGadgets, updateGadgetMovement, clearGadgets } from "../gadgets/index.js";
 import { updateTrainingDummy } from "./trainingDummy.js";
+import { updateSalvagePickups } from "../resources/index.js";
+import { updateSurvival } from "../survival/index.js";
+import { updateBuildingSystem } from "../building/index.js";
 import { updateDamagePopups } from "../effects/damage.js";
 import { updateParticles } from "../effects/particles.js";
+import { updateLighting } from "../effects/lighting.js";
 import { updateEnemies } from "./enemyAI.js";
 import { updateProjectiles } from "../combat/projectiles.js";
 import { updateVehicles, handleVehicleInteraction, getPlayerVehicle, forcePlayerExitVehicle } from "../vehicles/index.js";
 import { updateSupplyDrops } from "./supplyDrops.js";
 import { updateDestructibles } from "./destructibles.js";
+import { updateInteractables } from "./interactables.js";
 import { updateEnemySpawner } from "./enemySpawner.js";
 import { updateServerBrowser, showServerBrowser, hideServerBrowser, selectNext as selectServerBrowser, attemptJoinSession, getServerBrowserState, setHostingMetrics, attemptHostSession, attemptStopHosting, copyHostOffer, promptForHostOffer, promptForJoinerAnswer, copyLocalCandidates, promptForRemoteCandidates } from "../network/serverBrowser.js";
 import { updateP2P } from "../network/p2p.js";
@@ -26,8 +33,12 @@ import { getCurrentWeapon } from "../combat/weapons.js";
 import { updateRecoil } from "../../state/recoil.js";
 import { updateAmmoTimers, getAmmoStatus, startReload as requestReload } from "../../state/ammo.js";
 
+
 function clampPlayerX() {
-  stickman.x = Math.max(40, Math.min(canvas.width - 40, stickman.x));
+  const envWidth = getEnvironmentWidth();
+  const margin = 40;
+  const maxX = Math.max(margin, envWidth - margin);
+  stickman.x = Math.max(margin, Math.min(maxX, stickman.x));
 }
 
 function updatePlayerAlive(delta) {
@@ -147,7 +158,8 @@ function updatePlayerDead(delta) {
     stickman.smokeSlowTimer = 0;
     stickman.smokeSlowStrength = 1;
     clearGadgets();
-    stickman.x = canvas.width * 0.5;
+    const envWidth = getEnvironmentWidth();
+    stickman.x = envWidth * 0.5;
     stickman.y = GROUND_Y - standingHeight;
     stickman.vx = 0;
     stickman.vy = 0;
@@ -157,7 +169,14 @@ function updatePlayerDead(delta) {
 
 function updateGame(delta) {
   advanceTime(delta);
+  updateBuildingSystem(delta);
+  updateSalvagePickups(delta);
+  updateSurvival(delta);
   stickman.invulnerability = Math.max(0, stickman.invulnerability - delta);
+  stickman.structureShieldTimer = Math.max(0, (stickman.structureShieldTimer ?? 0) - delta);
+  if (stickman.structureShieldTimer <= 0) {
+    stickman.structureShieldStrength = 0;
+  }
   stickman.throwCooldown = Math.max(0, stickman.throwCooldown - delta);
   stickman.gadgetCooldown = Math.max(0, (stickman.gadgetCooldown ?? 0) - delta);
   stickman.stunTimer = Math.max(0, (stickman.stunTimer ?? 0) - delta);
@@ -322,10 +341,20 @@ function updateGame(delta) {
   updateVehicles(delta);
   updateSupplyDrops(delta);
   updateDestructibles(delta);
+  updateInteractables(delta);
   updateEnemySpawner(delta);
   updateServerBrowser(delta, timestampNow);
   updateP2P(delta);
   updateSquadmates(delta);
+  for (const ally of squadmates) {
+    if (!ally) {
+      continue;
+    }
+    ally.structureShieldTimer = Math.max(0, (ally.structureShieldTimer ?? 0) - delta);
+    if (ally.structureShieldTimer <= 0) {
+      ally.structureShieldStrength = 0;
+    }
+  }
   playerVehicle = getPlayerVehicle();
   inVehicle = Boolean(playerVehicle);
   if (inVehicle) {
@@ -398,6 +427,9 @@ function updateGame(delta) {
     }
   }
 
+  setCameraTargetX(stickman.x);
+  updateCamera(delta);
+
   updateTrainingDummy(delta);
   updateThrowables(delta);
   updateGadgets(delta);
@@ -406,6 +438,7 @@ function updateGame(delta) {
   updateRecoil(delta);
   updateDamagePopups(delta);
   updateParticles(delta);
+  updateLighting(delta);
   updatePolishDebug(delta);
   updateProjectiles(delta);
   updateRagdolls(delta, GROUND_Y);
@@ -413,6 +446,17 @@ function updateGame(delta) {
 }
 
 export { updateGame };
+
+
+
+
+
+
+
+
+
+
+
 
 
 

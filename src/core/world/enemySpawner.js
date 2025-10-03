@@ -1,54 +1,56 @@
-import { canvas } from "../../environment/canvas.js";
 import { enemies, createGruntEnemy } from "../../state/entities.js";
 import { ENEMY_SPAWN_SETTINGS } from "../../config/spawn.js";
+import { getEnvironmentWidth, getEnvironmentSpawnSettings } from "../../state/environment.js";
 
-const spawnState = {
-  timer: ENEMY_SPAWN_SETTINGS.spawnInterval,
-  seeded: false
-};
-
-function seedInitialEnemies() {
-  if (spawnState.seeded) {
-    return;
+function resolveSpawnPoints() {
+  const envWidth = getEnvironmentWidth();
+  const spawnSettings = getEnvironmentSpawnSettings();
+  const points = Array.isArray(spawnSettings?.enemies) ? spawnSettings.enemies.slice(0, 2) : [];
+  if (points.length >= 2) {
+    return points;
   }
-  spawnState.seeded = true;
-  const initial = Math.max(ENEMY_SPAWN_SETTINGS.minCount - enemies.length, 0);
-  if (initial <= 0) {
-    return;
-  }
-  spawnEnemies(initial);
+  const left = envWidth * 0.25;
+  const right = envWidth * 0.75;
+  return [left, right];
 }
 
-function spawnEnemies(count) {
-  for (let i = 0; i < count; i += 1) {
-    if (enemies.length >= ENEMY_SPAWN_SETTINGS.maxCount) {
+function spawnEnemies(count, options = {}) {
+  const contextTag = options.context ?? "sandbox";
+  const autoRespawn = options.autoRespawn ?? contextTag !== "survival";
+  const spawnPoints = resolveSpawnPoints();
+  const maxActive = Math.min(spawnPoints.length, ENEMY_SPAWN_SETTINGS.maxCount);
+  let spawned = 0;
+
+  for (let sideIndex = 0; sideIndex < spawnPoints.length; sideIndex += 1) {
+    if (spawned >= count || enemies.length >= ENEMY_SPAWN_SETTINGS.maxCount) {
       break;
     }
-    const padding = ENEMY_SPAWN_SETTINGS.spawnPadding ?? 80;
-    const spawnX = padding + Math.random() * (canvas.width - padding * 2);
-    const enemy = createGruntEnemy(spawnX);
+    if (contextTag === "survival") {
+      const hasAlive = enemies.some(
+        (enemy) => enemy.spawnContext === "survival" && enemy.spawnSide === sideIndex && enemy.health > 0
+      );
+      if (hasAlive) {
+        continue;
+      }
+    }
+    const spawnX = spawnPoints[sideIndex];
+    const enemy = createGruntEnemy(spawnX, {
+      context: contextTag,
+      autoRespawn,
+      spawnSide: sideIndex,
+      facing: sideIndex === 0 ? 1 : -1
+    });
     enemy.spawnX = spawnX;
     enemy.spawnY = enemy.y;
     enemy.respawnTimer = 0;
     enemies.push(enemy);
+    spawned += 1;
+    if (spawned >= maxActive) {
+      break;
+    }
   }
 }
 
-function updateEnemySpawner(delta) {
-  seedInitialEnemies();
-  if (enemies.length >= ENEMY_SPAWN_SETTINGS.maxCount) {
-    spawnState.timer = ENEMY_SPAWN_SETTINGS.spawnInterval;
-    return;
-  }
+function updateEnemySpawner() {}
 
-  spawnState.timer -= delta;
-  if (spawnState.timer <= 0) {
-    const deficit = Math.max(ENEMY_SPAWN_SETTINGS.minCount - enemies.length, 0);
-    const batch = Math.min(ENEMY_SPAWN_SETTINGS.spawnBatch, ENEMY_SPAWN_SETTINGS.maxCount - enemies.length);
-    const spawnCount = Math.max(batch, deficit);
-    spawnEnemies(spawnCount);
-    spawnState.timer = ENEMY_SPAWN_SETTINGS.spawnInterval;
-  }
-}
-
-export { updateEnemySpawner };
+export { updateEnemySpawner, spawnEnemies };

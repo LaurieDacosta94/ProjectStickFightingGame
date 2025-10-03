@@ -2,6 +2,7 @@
 import { context, GROUND_Y } from "../../environment/canvas.js";
 import { GRAVITY } from "../../config/constants.js";
 import { stickman, trainingDummy, enemies, getTotalHeight } from "../../state/entities.js";
+import { getEnvironmentWidth } from "../../state/environment.js";
 import { getCurrentWeapon } from "./weapons.js";
 import { damageDestructiblesInRadius } from "../world/destructibles.js";
 import { clamp } from "../utils/math.js";
@@ -35,12 +36,13 @@ function throwEquippedWeapon() {
   const facing = stickman.facing || 1;
   const arc = config.arcVelocity ?? { vx: 260, vy: -420 };
   const spawnOffset = config.spawnOffset ?? { x: 22, y: 12 };
+  const envWidth = getEnvironmentWidth();
 
   stickman.throwCooldown = config.cooldownSeconds ?? 0.9;
 
   const grenade = {
     id: `grenade-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    x: stickman.x + facing * (spawnOffset.x ?? 22),
+    x: clamp(stickman.x + facing * (spawnOffset.x ?? 22), 40, envWidth - 40),
     y: stickman.y + (spawnOffset.y ?? 12),
     vx: facing * (arc.vx ?? 260),
     vy: arc.vy ?? -420,
@@ -288,7 +290,7 @@ function updateSmokeClouds(delta) {
 }
 
 function updateThrowables(delta) {
-  const width = context.canvas.width;
+  const envWidth = getEnvironmentWidth();
 
   for (const grenade of throwables) {
     if (!grenade.detonated) {
@@ -308,8 +310,8 @@ function updateThrowables(delta) {
         }
       }
 
-      if (grenade.x - grenade.radius <= 0 || grenade.x + grenade.radius >= width) {
-        grenade.x = clamp(grenade.x, grenade.radius, width - grenade.radius);
+      if (grenade.x - grenade.radius <= 0 || grenade.x + grenade.radius >= envWidth) {
+        grenade.x = clamp(grenade.x, grenade.radius, envWidth - grenade.radius);
         grenade.vx = -grenade.vx * 0.45;
       }
 

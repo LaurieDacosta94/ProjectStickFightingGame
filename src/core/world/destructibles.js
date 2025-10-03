@@ -1,4 +1,5 @@
-﻿import { destructibles, getDestructibles } from "../../state/destructibles.js";
+﻿import { spawnSalvagePickup } from "../../state/resources.js";
+import { destructibles, getDestructibles } from "../../state/destructibles.js";
 import { clamp } from "../utils/math.js";
 import { spawnExplosionParticles, spawnExplosionDebris, spawnSmokePuffs, spawnRingBurst } from "../effects/particles.js";
 import { applyExplosionImpulse, computeExplosionFalloff } from "../combat/explosions.js";
@@ -110,6 +111,20 @@ function triggerDestructibleDeath(destructible, hit = {}) {
       sourceId: destructible.id,
       cause: "chain-explosion"
     });
+  }
+  const salvageAmount = template.salvage ?? Math.round((destructible.maxHealth ?? 200) / 25);
+  if (salvageAmount > 0) {
+    const chunks = Math.max(1, Math.round(salvageAmount / 10));
+    const amountPer = Math.max(1, Math.round(salvageAmount / chunks));
+    for (let i = 0; i < chunks; i += 1) {
+      const jitterX = (Math.random() - 0.5) * (destructible.width ?? 120) * 0.4;
+      spawnSalvagePickup({
+        x: centerX + jitterX,
+        y: centerY,
+        amount: amountPer,
+        vy: -120 - Math.random() * 60
+      });
+    }
   }
 }
 

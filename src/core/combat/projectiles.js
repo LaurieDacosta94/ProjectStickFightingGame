@@ -3,6 +3,7 @@ import { GRAVITY } from "../../config/constants.js";
 import { trainingDummy, enemies } from "../../state/entities.js";
 import { applyDamageToDummy, applyDamageToEnemy } from "./damageHandlers.js";
 import { handleProjectileCollision } from "../world/destructibles.js";
+import { spawnDynamicLight } from "../effects/lighting.js";
 
 const projectiles = [];
 
@@ -32,6 +33,7 @@ function spawnProjectile({
     knockback,
     facing,
     gravityFactor,
+    lightCooldown: 0,
     hitTargets: new Set()
   });
 }
@@ -49,6 +51,22 @@ function updateProjectiles(delta) {
     projectile.vy += GRAVITY * delta * projectile.gravityFactor;
     projectile.x += projectile.vx * delta;
     projectile.y += projectile.vy * delta;
+    projectile.lightCooldown = Math.max(0, (projectile.lightCooldown ?? 0) - delta);
+    if (projectile.lightCooldown <= 0 && projectile.life > 0) {
+      const tracerRadius = Math.max(90, projectile.radius * 16);
+      spawnDynamicLight({
+        type: "point",
+        x: projectile.x,
+        y: projectile.y,
+        radius: tracerRadius,
+        intensity: 0.4 + Math.random() * 0.2,
+        color: projectile.color ?? "#ffcf7a",
+        ttl: 0.08,
+        flicker: 0.25,
+        decay: 1.3
+      });
+      projectile.lightCooldown = 0.05;
+    }
 
     if (projectile.y + projectile.radius >= GROUND_Y) {
       projectile.life = 0;

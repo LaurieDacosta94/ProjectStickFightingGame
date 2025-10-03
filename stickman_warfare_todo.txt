@@ -126,19 +126,19 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 28. [x] Implement explosion physics and debris effects. (Shared explosion impulse module now drives radial damage/knockback and spawns debris sprays on grenades, chain blasts, and destructible ruptures.)  
 
-29. [ ] Add dynamic lighting system (flashlights, explosions, tracer fire).  
+29. [x] Add dynamic lighting system (flashlights, explosions, tracer fire). (Flashlight cones, tracer pulses, and explosion bursts now drive additive lighting overlay.)
 
-30. [ ] Add interactive objects (push crates, kick barrels, traps).  
+30. [x] Add interactive objects (push crates, kick barrels, traps). (Movable crates, rollable barrels, and shock-floor traps now react to pushes, melee hits, and proximity triggers.)
 
-31. [ ] Expand to multiple environments (jungle, desert, sci-fi).  
+31. [x] Expand to multiple environments (jungle, desert, sci-fi). (Environment presets now swap terrain, decor, spawns, and ambient lighting with Alt+9/Alt+0 cycling.)
 
-32. [ ] Implement player-built structures system (basic building framework).  
+32. [x] Implement player-built structures system (basic building framework). (B toggles build mode, ,/. cycle blueprints, and placements persist per environment with ambient structure lighting.)
 
-33. [ ] Add defensive towers, barricades, and traps.  
+33. [x] Add defensive towers, barricades, and traps. (Player deployment now includes barricades, watchtower turrets, shield emitters, and shock traps with ambient lighting and damage logic.)
 
-34. [ ] Add resource system for building (materials, salvage, drops).  
+34. [x] Add resource system for building (materials, salvage, drops). (Destructibles and supply drops now spill salvage pickups, materials auto-track in build HUD, and shield/turret defenses feed off the new resource pool.)
 
-35. [ ] Integrate build system into Survival Mode (base fortifications).  
+35. [x] Integrate build system into Survival Mode (base fortifications). (Survival waves now drip-feed materials, salvage pickups, and auto-trigger wave progression for fortifying between rounds.)  
 
 
 

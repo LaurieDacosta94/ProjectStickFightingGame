@@ -1,5 +1,6 @@
 import { canvas, GROUND_Y } from "../../environment/canvas.js";
 import { vehicles, VEHICLE_DEFINITIONS, getVehicleById } from "../../state/vehicles.js";
+import { getEnvironmentWidth } from "../../state/environment.js";
 import { stickman, getTotalHeight } from "../../state/entities.js";
 import { input } from "../input/index.js";
 import { clamp } from "../utils/math.js";
@@ -64,7 +65,8 @@ function syncStickmanWithVehicle(vehicle, definition) {
   const baseHeight = getTotalHeight(POSES.standing);
   const seatWorldX = vehicle.x + seat.x;
   const seatWorldY = vehicle.y + seat.y;
-  const clampedX = clamp(seatWorldX, 40, canvas.width - 40);
+  const envWidth = getEnvironmentWidth();
+  const clampedX = clamp(seatWorldX, 40, envWidth - 40);
   stickman.x = clampedX;
   stickman.y = seatWorldY - baseHeight;
   stickman.vx = vehicle.vx;
@@ -127,7 +129,8 @@ function exitVehicle(vehicle, options = {}) {
   stickman.vehicleId = null;
   stickman.controlMode = "onFoot";
   stickman.vehicleCandidateId = null;
-  stickman.x = clamp(vehicle.x + chosenOffset.x, 40, canvas.width - 40);
+  const envWidth = getEnvironmentWidth();
+  stickman.x = clamp(vehicle.x + chosenOffset.x, 40, envWidth - 40);
   stickman.y = GROUND_Y - baseHeight;
   if (options.inheritVelocity === false) {
     stickman.vx = 0;
@@ -244,7 +247,8 @@ function updateGroundVehicle(vehicle, definition, delta, isControlled) {
 
   const halfWidth = definition.width * 0.5;
   const minX = halfWidth + 32;
-  const maxX = canvas.width - halfWidth - 32;
+  const envWidth = getEnvironmentWidth();
+  const maxX = envWidth - halfWidth - 32;
   vehicle.x = clamp(vehicle.x, minX, maxX);
   if (vehicle.x === minX || vehicle.x === maxX) {
     vehicle.vx = 0;
@@ -299,7 +303,8 @@ function updateWaterVehicle(vehicle, definition, delta, isControlled) {
   vehicle.x += vehicle.vx * delta;
   const halfWidth = definition.width * 0.5;
   const minX = halfWidth + 32;
-  const maxX = canvas.width - halfWidth - 32;
+  const envWidth = getEnvironmentWidth();
+  const maxX = envWidth - halfWidth - 32;
   vehicle.x = clamp(vehicle.x, minX, maxX);
   if (vehicle.x === minX || vehicle.x === maxX) {
     vehicle.vx = 0;
@@ -399,7 +404,8 @@ function updateAirVehicle(vehicle, definition, delta, isControlled) {
 
   const halfWidth = definition.width * 0.5;
   const minX = halfWidth + 32;
-  const maxX = canvas.width - halfWidth - 32;
+  const envWidth = getEnvironmentWidth();
+  const maxX = envWidth - halfWidth - 32;
   vehicle.x = clamp(vehicle.x, minX, maxX);
   if (vehicle.x === minX || vehicle.x === maxX) {
     vehicle.vx = 0;
@@ -536,3 +542,5 @@ function updateVehicles(delta) {
 }
 
 export { updateVehicles, handleVehicleInteraction, getPlayerVehicle, forcePlayerExitVehicle };
+
+

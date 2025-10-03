@@ -1,4 +1,5 @@
 import { canvas, GROUND_Y } from "../environment/canvas.js";
+import { getEnvironmentWidth } from "./environment.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -347,8 +348,9 @@ function createVehicle(type, x, options = {}) {
 
   const movementType = definition.movementType ?? "ground";
   const minX = definition.width * 0.5;
-  const maxX = canvas.width - definition.width * 0.5;
-  const centerX = clamp(x ?? canvas.width * 0.5, minX, maxX);
+  const envWidth = getEnvironmentWidth();
+  const maxX = Math.max(minX, envWidth - definition.width * 0.5);
+  const centerX = clamp(x ?? envWidth * 0.5, minX, maxX);
 
   let top;
   let onGround = true;
@@ -407,14 +409,14 @@ function createVehicle(type, x, options = {}) {
 }
 
 const vehicles = [
-  createVehicle("buggy", canvas.width * 0.14),
-  createVehicle("buggy", canvas.width * 0.28),
-  createVehicle("tideSkiff", canvas.width * 0.38),
-  createVehicle("raptorHeli", canvas.width * 0.56, { hover: 140 }),
-  createVehicle("arrowJet", canvas.width * 0.64, { hover: 200 }),
-  createVehicle("stormBarge", canvas.width * 0.74),
-  createVehicle("abyssSub", canvas.width * 0.78),
-  createVehicle("scoutDrone", canvas.width * 0.9, { hover: 100 })
+  createVehicle("buggy", getEnvironmentWidth() * 0.14),
+  createVehicle("buggy", getEnvironmentWidth() * 0.28),
+  createVehicle("tideSkiff", getEnvironmentWidth() * 0.38),
+  createVehicle("raptorHeli", getEnvironmentWidth() * 0.56, { hover: 140 }),
+  createVehicle("arrowJet", getEnvironmentWidth() * 0.64, { hover: 200 }),
+  createVehicle("stormBarge", getEnvironmentWidth() * 0.74),
+  createVehicle("abyssSub", getEnvironmentWidth() * 0.78),
+  createVehicle("scoutDrone", getEnvironmentWidth() * 0.9, { hover: 100 })
 ];
 
 function getVehicleById(id) {
@@ -422,3 +424,5 @@ function getVehicleById(id) {
 }
 
 export { VEHICLE_DEFINITIONS, vehicles, createVehicle, getVehicleById };
+
+

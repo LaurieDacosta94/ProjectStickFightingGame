@@ -1,5 +1,6 @@
 import { context, GROUND_Y } from "../../environment/canvas.js";
 import { POSES, SPEED } from "../../config/constants.js";
+import { getEnvironmentDefinition } from "../../state/environment.js";
 import { stickman, trainingDummy, enemies, squadmates, getRemotePlayers } from "../../state/entities.js";
 import { getServerBrowserState } from "../../state/serverBrowser.js";
 import { vehicles, VEHICLE_DEFINITIONS, getVehicleById } from "../../state/vehicles.js";
@@ -12,6 +13,11 @@ import { drawThrowables } from "../combat/throwables.js";
 import { drawGadgets, getGadgetStatus } from "../gadgets/index.js";
 import { drawSupplyDrops } from "./supplyDrops.js";
 import { drawDestructibles } from "./destructibles.js";
+import { drawBuildings, drawBuildPreview } from "./buildings.js";
+import { drawSalvagePickups } from "./resources.js";
+import { getSurvivalHudStatus } from "../survival/index.js";
+import { drawInteractables } from "./interactables.js";
+import { getBuildingHudStatus } from "../building/index.js";
 import { drawParticles } from "../effects/particles.js";
 import { getPolishDebugState } from "../events/polishDebug.js";
 import { getRecoilOffset } from "../../state/recoil.js";
@@ -20,40 +26,89 @@ import { getP2PStatus } from "../network/p2p.js";
 import { getSquadStatus } from "../squad/index.js";
 import { getPlayerVehicle } from "../vehicles/index.js";
 
-function drawBackground() {
+function drawBackground(camera) {
+  const environment = getEnvironmentDefinition();
+  const background = environment?.background ?? {};
+  const offsetX = camera?.offsetX ?? 0;
+  const gradientStops = Array.isArray(background.gradientStops) && background.gradientStops.length > 0
+    ? background.gradientStops
+    : [
+        { offset: 0, color: "#111a2c" },
+        { offset: 0.4, color: "#182439" },
+        { offset: 0.75, color: "#1f2d44" },
+        { offset: 1, color: "#232f49" }
+      ];
   const skyGradient = context.createLinearGradient(0, 0, 0, context.canvas.height);
-  skyGradient.addColorStop(0, "#111a2c");
-  skyGradient.addColorStop(0.4, "#182439");
-  skyGradient.addColorStop(0.75, "#1f2d44");
-  skyGradient.addColorStop(1, "#232f49");
+  for (const stop of gradientStops) {
+    const offset = typeof stop.offset === "number" ? Math.min(Math.max(stop.offset, 0), 1) : 0;
+    const color = stop.color ?? "#111a2c";
+    skyGradient.addColorStop(offset, color);
+  }
   context.fillStyle = skyGradient;
   context.fillRect(0, 0, context.canvas.width, context.canvas.height);
 
-  // distant skyline
-  context.fillStyle = "#1a2437";
-  context.beginPath();
-  context.moveTo(0, GROUND_Y - 220);
-  context.lineTo(220, GROUND_Y - 260);
-  context.lineTo(420, GROUND_Y - 210);
-  context.lineTo(640, GROUND_Y - 280);
-  context.lineTo(820, GROUND_Y - 230);
-  context.lineTo(1040, GROUND_Y - 260);
-  context.lineTo(1220, GROUND_Y - 210);
-  context.lineTo(1380, GROUND_Y - 260);
-  context.lineTo(context.canvas.width, GROUND_Y - 200);
-  context.lineTo(context.canvas.width, GROUND_Y);
-  context.lineTo(0, GROUND_Y);
-  context.closePath();
-  context.fill();
+  const silhouettes = Array.isArray(background.silhouettes) ? background.silhouettes : [];
+  for (const silhouette of silhouettes) {
+    const points = Array.isArray(silhouette.points) ? silhouette.points : [];
+    if (points.length < 3) {
+      continue;
+    }
+    context.fillStyle = silhouette.color ?? "rgba(0, 0, 0, 0.45)";
+    context.beginPath();
+    context.moveTo(points[0].x - offsetX, points[0].y);
+    for (let i = 1; i < points.length; i += 1) {
+      context.lineTo(points[i].x - offsetX, points[i].y);
+    }
+    context.closePath();
+    context.fill();
+  }
 
-  // far water sheen behind coastline
-  const horizon = context.createLinearGradient(0, GROUND_Y - 120, 0, GROUND_Y - 40);
-  horizon.addColorStop(0, "rgba(46, 86, 126, 0.25)");
-  horizon.addColorStop(1, "rgba(28, 52, 84, 0)");
-  context.fillStyle = horizon;
-  context.fillRect(0, GROUND_Y - 140, context.canvas.width, 120);
+  const horizon = background.horizonBand;
+  if (horizon) {
+    const height = horizon.height ?? 120;
+    const start = horizon.start ?? GROUND_Y - height - 30;
+    const band = context.createLinearGradient(0, start, 0, start + height);
+    band.addColorStop(0, horizon.topColor ?? "rgba(46, 86, 126, 0.25)");
+    band.addColorStop(1, horizon.bottomColor ?? "rgba(28, 52, 84, 0)");
+    context.fillStyle = band;
+    context.fillRect(0, start, context.canvas.width, height);
+  }
 
-  context.fillStyle = "#1b2231";
+  if (environment?.theme === "desert") {
+    const sunX = background.sun?.x ?? context.canvas.width * 0.72;
+    const sunY = background.sun?.y ?? context.canvas.height * 0.18;
+    const sunRadius = background.sun?.radius ?? 70;
+    const sunGradient = context.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunRadius);
+    sunGradient.addColorStop(0, "rgba(255, 214, 128, 0.9)");
+    sunGradient.addColorStop(1, "rgba(255, 214, 128, 0)");
+    context.fillStyle = sunGradient;
+    context.beginPath();
+    context.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+    context.fill();
+  } else if (environment?.theme === "sci-fi") {
+    const step = 110;
+    context.fillStyle = "#a8c2ff";
+    context.globalAlpha = 0.35;
+    for (let x = 0; x < context.canvas.width; x += step) {
+      for (let y = 0; y < GROUND_Y - 40; y += step) {
+        const jitterX = (Math.sin(x * 13.37 + y) * 8) % 18;
+        const jitterY = (Math.cos(y * 7.91 + x) * 6) % 14;
+        context.fillRect(x + jitterX, y + jitterY, 2, 2);
+      }
+    }
+    context.globalAlpha = 1;
+  }
+
+  if (environment?.theme === "jungle") {
+    const mistStart = GROUND_Y - 140;
+    const mistGradient = context.createLinearGradient(0, mistStart, 0, GROUND_Y);
+    mistGradient.addColorStop(0, "rgba(60, 120, 80, 0.18)");
+    mistGradient.addColorStop(1, "rgba(40, 70, 50, 0)");
+    context.fillStyle = mistGradient;
+    context.fillRect(0, mistStart, context.canvas.width, GROUND_Y - mistStart);
+  }
+
+  context.fillStyle = background.groundColor ?? "#1b2231";
   context.fillRect(0, GROUND_Y, context.canvas.width, context.canvas.height - GROUND_Y);
 }
 
@@ -423,15 +478,89 @@ function drawHud() {
   context.fillStyle = "#d0d4de";
   context.font = "16px 'Segoe UI', Arial, sans-serif";
   context.textAlign = "left";
-  context.fillText("Move: WASD/Arrows   Jump: Space   Crouch: S   Roll: Shift   Attack: J or Left Click   Throw: G or Right Click", 24, 32);
-  context.fillText("Server Browser: L (toggle)  |  Join: Enter  |  Host: H  |  Offer: O  |  Paste: P  |  Apply: I  |  ICE Copy: M  |  ICE Apply: N", 24, 48);
+  context.fillText("Move: WASD/Arrows   Jump: Space   Crouch: S   Roll: Shift   Attack: J or Left Click   Throw: G or Right Click   Build: B toggle, ,/. cycle, Left Click place", 24, 32);
+  context.fillText("Cancel Build: Esc", 24, 48);
+  context.fillText("Server Browser: L (toggle)  |  Join: Enter  |  Host: H  |  Offer: O  |  Paste: P  |  Apply: I  |  ICE Copy: M  |  ICE Apply: N", 24, 64);
+  const weaponHudX = context.canvas.width - 24;
+  let weaponHudY = 32;
+  context.save();
+  context.textAlign = "right";
+  context.fillStyle = "#d0d4de";
+  context.fillText(`Weapon: ${weaponName}`, weaponHudX, weaponHudY);
+  weaponHudY += 18;
+  if (ammoStatus) {
+    const isInfinite = ammoStatus.capacity === Number.POSITIVE_INFINITY;
+    const magazineDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.magazine)}`;
+    const reserveDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.reserve)}`;
+    let ammoLabel = `Ammo: ${magazineDisplay}/${reserveDisplay}`;
+    if (ammoStatus.reloading) {
+      ammoLabel += ` (Reloading ${Math.max(0, ammoStatus.reloadTimer).toFixed(1)}s)`;
+    }
+    context.fillText(ammoLabel, weaponHudX, weaponHudY);
+    weaponHudY += 18;
+  }
+  const gadgetStatus = getGadgetStatus();
+  if (gadgetStatus) {
+    context.fillStyle = gadgetStatus.ready ? "#8cffd4" : "#d0d4de";
+    const gadgetLabel = gadgetStatus.label ?? gadgetStatus.id ?? "Gadget";
+    const cooldownLabel = gadgetStatus.cooldown > 0 ? ` (${gadgetStatus.cooldown.toFixed(1)}s)` : "";
+    context.fillText(`${gadgetLabel}${cooldownLabel}`, weaponHudX, weaponHudY);
+    weaponHudY += 18;
+  }
+  context.restore();
 
   const comboText = stickman.attacking && stickman.currentAttack ? `Combo: ${stickman.currentAttack.name}` : "Combo: Ready";
-  context.fillText(comboText, 24, 52);
 
-  context.fillText(`Weapon: ${weaponName}`, 24, 72);
-
-  let infoY = 92;
+  let hudY = 84;
+  const survivalHud = getSurvivalHudStatus();
+  if (survivalHud && survivalHud.active) {
+    const stage = survivalHud.stage ?? "wave";
+    const waveNumber = Math.max(1, stage === "countdown" ? survivalHud.wave + 1 : survivalHud.wave || 1);
+    context.fillStyle = "#ffd66c";
+    context.fillText(`Survival Wave ${waveNumber}`, 24, hudY);
+    hudY += 18;
+    context.fillStyle = "#d0d4de";
+    if (stage === "countdown") {
+      context.fillText(`Next wave in ${survivalHud.timer.toFixed(1)}s`, 24, hudY);
+      hudY += 18;
+    } else if (stage === "wave") {
+      context.fillText(`Enemies remaining: ${survivalHud.enemiesAlive}`, 24, hudY);
+      hudY += 18;
+    } else if (stage === "rest") {
+      context.fillText(`Resupply time: ${survivalHud.timer.toFixed(1)}s`, 24, hudY);
+      hudY += 18;
+    }
+    if ((survivalHud.lastReward ?? 0) > 0) {
+      context.fillStyle = "#8cffd4";
+      context.fillText(`Last reward: +${survivalHud.lastReward} materials`, 24, hudY);
+      hudY += 18;
+      context.fillStyle = "#d0d4de";
+    }
+  } else {
+    context.fillStyle = "#9aa2b1";
+    context.fillText("Survival Mode: Press Y to begin waves", 24, hudY);
+    hudY += 18;
+    context.fillStyle = "#d0d4de";
+  }
+  context.fillText(comboText, 24, hudY);
+  hudY += 20;
+  let infoY = hudY;
+  const buildingHud = getBuildingHudStatus();
+  if (buildingHud) {
+    if (buildingHud.active) {
+      context.fillStyle = buildingHud.valid ? "#8cffd4" : "#ff9c9c";
+      context.fillText(`Building: ${buildingHud.blueprintName} (Cost ${buildingHud.cost || 0})`, 24, infoY);
+      infoY += 18;
+      context.fillStyle = "#d0d4de";
+      context.fillText(`Materials: ${buildingHud.resources}`, 24, infoY);
+      infoY += 20;
+    } else {
+      context.fillStyle = "#9aa2b1";
+      context.fillText(`Materials: ${buildingHud.resources}   (Press B to build)`, 24, infoY);
+      infoY += 20;
+    }
+    context.fillStyle = "#d0d4de";
+  }
   const playerVehicle = getPlayerVehicle();
   if (playerVehicle) {
     const vehicleDefinition = VEHICLE_DEFINITIONS[playerVehicle.type];
@@ -608,8 +737,6 @@ function drawHud() {
   }
 
   let nextHudY = 172;
-  const gadgetStatus = getGadgetStatus();
-
   if (stickman.comboWindowOpen) {
     context.fillStyle = "#ffcf7a";
     context.fillText("Press attack now to chain!", 24, nextHudY);
@@ -824,7 +951,7 @@ function drawServerBrowser() {
   context.font = "13px 'Segoe UI', Arial, sans-serif";
   context.fillStyle = "#9aa9c7";
   context.fillText("Join: Enter  |  Navigate: [ / ]  |  Close: L", x + 20, y + 52);
-  context.fillText("Host: H  |  Stop: U  |  Offer: O  |  Paste Offer: P  |  Answer: I  |  ICE Copy: M  |  ICE Apply: N", x + 20, y + 68);
+  context.fillText("Toggle: L  |  Join: Enter  |  Host: H  |  Stop: U  |  Next: ] or /  |  Prev: [", x + 20, y + 68);
 
   let statusY = y + 88;
   if (state.error) {
@@ -903,14 +1030,14 @@ function drawServerBrowser() {
       p2pY += 16;
     } else if (p2p.offer) {
       context.fillStyle = "#8cffd4";
-      context.fillText("Offer ready (press O to copy).", x + 20, p2pY);
+      context.fillText("Offer ready and shared with joiners.", x + 20, p2pY);
       p2pY += 16;
       context.fillStyle = "#9aa9c7";
       context.fillText(snippet(p2p.offer), x + 20, p2pY);
       p2pY += 16;
     } else {
       context.fillStyle = "#9aa9c7";
-      context.fillText("Press O to generate an offer for peers.", x + 20, p2pY);
+      context.fillText("Preparing host offer...", x + 20, p2pY);
       p2pY += 16;
     }
 
@@ -926,14 +1053,14 @@ function drawServerBrowser() {
       p2pY += 16;
     } else if (p2p.answer) {
       context.fillStyle = "#8cffd4";
-      context.fillText("Answer ready. Share it with the host.", x + 20, p2pY);
+      context.fillText("Answer applied. Waiting for host handshake.", x + 20, p2pY);
       p2pY += 16;
       context.fillStyle = "#9aa9c7";
       context.fillText(snippet(p2p.answer), x + 20, p2pY);
       p2pY += 16;
     } else {
       context.fillStyle = "#9aa9c7";
-      context.fillText("Press P after copying the host offer JSON.", x + 20, p2pY);
+      context.fillText("Waiting for host offer...", x + 20, p2pY);
       p2pY += 16;
     }
   }
@@ -981,7 +1108,11 @@ function drawServerBrowser() {
 
   context.restore();
 }
-export { drawBackground, drawDestructibles, drawVehicles, drawSupplyDrops, drawRemotePlayers, drawServerBrowser, drawSquadmates, drawStickman, drawHitboxes, drawTrainingDummy, drawEnemies, drawHud, drawProjectilesLayer, drawGadgetsLayer };
+export { drawBackground, drawDestructibles, drawBuildings, drawInteractables, drawVehicles, drawSupplyDrops, drawRemotePlayers, drawServerBrowser, drawSquadmates, drawStickman, drawHitboxes, drawBuildPreview, drawTrainingDummy, drawEnemies, drawHud, drawProjectilesLayer, drawGadgetsLayer };
+
+
+
+
 
 
 

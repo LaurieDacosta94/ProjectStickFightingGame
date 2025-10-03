@@ -1,5 +1,6 @@
 import { canvas, GROUND_Y, context } from "../../environment/canvas.js";
 import { stickman } from "../../state/entities.js";
+import { getEnvironmentWidth } from "../../state/environment.js";
 import { clamp } from "../utils/math.js";
 
 const grappleState = {
@@ -27,7 +28,8 @@ function canGrapple(config) {
 }
 
 function startGrapple(config) {
-  const clampRect = config.clamp ?? { left: 80, right: canvas.width - 80 };
+  const envWidth = getEnvironmentWidth();
+  const clampRect = config.clamp ?? { left: 80, right: envWidth - 80 };
   const apex = config.apex ?? { y: GROUND_Y - 280 };
   const launchLength = config.maxLength ?? 320;
   const facing = stickman.facing || 1;
@@ -124,3 +126,4 @@ function hasActiveGrapple() {
 }
 
 export { canGrapple, startGrapple, updateGrappleState, drawGrapple, hasActiveGrapple, clearGrapple };
+

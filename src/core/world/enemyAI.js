@@ -1,5 +1,6 @@
-﻿import { GRAVITY } from "../../config/constants.js";
+import { GRAVITY } from "../../config/constants.js";
 import { canvas, GROUND_Y } from "../../environment/canvas.js";
+import { getEnvironmentWidth } from "../../state/environment.js";
 import { stickman, enemies } from "../../state/entities.js";
 import { resolvePlatformLanding } from "./arena.js";
 import { applyDamageToPlayer } from "../combat/damageHandlers.js";
@@ -161,7 +162,8 @@ function updateEnemyAI(enemy, delta) {
     enemy.onGround = true;
   }
 
-  enemy.x = Math.max(60, Math.min(canvas.width - 60, enemy.x));
+  const envWidth = getEnvironmentWidth();
+  enemy.x = Math.max(60, Math.min(envWidth - 60, enemy.x));
 }
 
 function updateEnemyAttacks(enemy) {
@@ -191,4 +193,7 @@ function updateEnemies(delta) {
 }
 
 export { updateEnemyAI, updateEnemyAttacks, updateEnemies };
+
+
+
 

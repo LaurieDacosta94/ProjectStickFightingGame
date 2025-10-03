@@ -1,4 +1,4 @@
-import { stickman } from "../../state/entities.js";
+﻿import { stickman } from "../../state/entities.js";
 
 const muzzleFlashes = [];
 const shieldBursts = [];
@@ -147,6 +147,16 @@ function handleRecoilKick(event) {
   pushNotice(`Recoil ${weaponId}: ${magnitude.toFixed(2)}`, 1.2);
 }
 
+
+function handleEnvironmentChanged(event) {
+  const env = event?.detail?.environment;
+  const name = env?.name ?? env?.id;
+  if (!name) {
+    return;
+  }
+  pushNotice(`Environment set to ${name}`, 2.2);
+}
+
 function handleShieldHit(event) {
   if (!shouldCapture("shield")) {
     return;
@@ -272,6 +282,7 @@ function ensureListeners() {
   window.addEventListener("throwable:flash-burst", handleThrowableFlashBurst);
   window.addEventListener("throwable:smoke-detonate", handleThrowableSmokeDetonate);
   window.addEventListener("throwable:smoke-dissipate", handleThrowableSmokeDissipate);
+  window.addEventListener("environment:changed", handleEnvironmentChanged);
   window.addEventListener("keydown", handleFilterToggle);
   listenersRegistered = true;
 }

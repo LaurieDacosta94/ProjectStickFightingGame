@@ -1,4 +1,7 @@
-﻿import { stickman, trainingDummy } from "../../state/entities.js";
+import { stickman, trainingDummy } from "../../state/entities.js";
+import { addMaterials } from "../../state/resources.js";
+import { SURVIVAL_SETTINGS } from "../../config/survival.js";
+import { isSurvivalActive } from "../../state/survival.js";
 import { spawnRagdoll } from "../effects/ragdoll.js";
 import { spawnDamagePopup } from "../effects/damage.js";
 import { absorbShieldHit } from "../gadgets/index.js";
@@ -49,6 +52,12 @@ function applyDamageToEnemy(enemy, hit) {
     enemy.state = "defeated";
     enemy.attackCooldown = 1.2;
     enemy.respawnTimer = 3;
+    if (isSurvivalActive()) {
+      const killReward = SURVIVAL_SETTINGS.killReward ?? 0;
+      if (killReward > 0) {
+        addMaterials(killReward);
+      }
+    }
   }
 }
 
@@ -69,10 +78,17 @@ function applyDamageToPlayer(enemy, hit) {
     facing
   });
 
-  const finalDamage = adjustedHit?.damage ?? 0;
-  const finalKnockback = adjustedHit?.knockback ?? baseKnockback;
-  const finalLaunch = adjustedHit?.launch ?? baseLaunch;
+  let finalDamage = adjustedHit?.damage ?? 0;
+  let finalKnockback = adjustedHit?.knockback ?? baseKnockback;
+  let finalLaunch = adjustedHit?.launch ?? baseLaunch;
   const finalFacing = adjustedHit?.facing ?? facing;
+
+  const shieldReduction = Math.max(0, Math.min(0.9, stickman.structureShieldStrength ?? 0));
+  if (shieldReduction > 0) {
+    finalDamage *= 1 - shieldReduction;
+    finalKnockback *= 1 - shieldReduction * 0.5;
+    finalLaunch *= 1 - shieldReduction * 0.5;
+  }
 
   if (finalDamage > 0) {
     stickman.health = Math.max(0, stickman.health - finalDamage);
@@ -97,3 +113,4 @@ function applyDamageToPlayer(enemy, hit) {
 }
 
 export { applyDamageToDummy, applyDamageToEnemy, applyDamageToPlayer };
+

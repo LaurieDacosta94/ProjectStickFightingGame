@@ -1,4 +1,5 @@
 import { canvas, GROUND_Y, context } from "../../environment/canvas.js";
+import { getEnvironmentWidth } from "../../state/environment.js";
 import { stickman, trainingDummy, enemies, getTotalHeight } from "../../state/entities.js";
 import { spawnProjectile } from "../combat/projectiles.js";
 import { clamp } from "../utils/math.js";
@@ -9,7 +10,8 @@ function createTurret(config, facing) {
   const height = config.height ?? 54;
   const spawnOffset = config.spawnOffset ?? { x: 64, y: 0 };
   const baseHeight = getTotalHeight(stickman.currentPose ?? null) || 0;
-  const spawnX = clamp(stickman.x + facing * (spawnOffset.x ?? 64), 40, canvas.width - 40);
+  const envWidth = getEnvironmentWidth();
+  const spawnX = clamp(stickman.x + facing * (spawnOffset.x ?? 64), 40, envWidth - 40);
   const spawnYBase = stickman.y + baseHeight;
   const spawnY = Math.min(spawnYBase + (spawnOffset.y ?? 0), GROUND_Y);
   const y = Math.min(GROUND_Y - height, spawnY - height);
@@ -159,3 +161,4 @@ function getTurretCount() {
 }
 
 export { turrets, deployTurret, updateTurrets, drawTurrets, clearTurrets, getTurretCount };
+
