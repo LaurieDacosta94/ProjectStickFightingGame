@@ -1,4 +1,4 @@
-# Stickman Warfare - Development To-Do List
+﻿# Stickman Warfare - Development To-Do List
 
 
 
@@ -120,11 +120,7 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 ## Phase 5: Environments
 
-<<<<<<< Updated upstream
-26. [x] Create first test map (urban environment). (Neo District layout with multi-tier streets, rooftops, and skyline d cor.)  
-=======
 26. [x] Create first test map (urban environment). (Neo District layout with multi-tier streets, rooftops, and skyline d�cor.)  
->>>>>>> Stashed changes
 
 27. [x] Add destructible props (walls, cars, barrels). (Neo District now scatters destructible barriers, cars, and volatile barrel clusters with shared damage logic, chain explosions, and rubble visuals.)  
 
@@ -152,19 +148,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 ## Phase 6: Aiming & Animation Overhaul
 
-<<<<<<< Updated upstream
-36. [ ] Implement universal 360-degree aiming system across players, squadmates, NPCs, and mounted entities with synchronized targeting states.  
-
-37. [ ] Map player aiming to mouse position (with controller fallback) including smoothing, dead zones, and sensitivity tuning.  
-
-38. [ ] Render equipped weapons in character hands with direction-aware flipping, depth layering, and visible weapon swapping.  
-
-39. [ ] Bind arm rigs to aim direction using IK/blend trees so limbs hold weapons correctly while aiming left or right.  
-
-40. [ ] Expand locomotion animations (idle, walk, run, crouch) to adapt leg poses to movement speed and direction changes.  
-
-41. [ ] Create attack-specific arm animation sets (fists, melee, ranged) that blend with aim direction and combo timing.  
-=======
 36. [x] Implement universal 360-degree aiming system across players, squadmates, NPCs, and mounted entities with synchronized targeting states.  
 
 37. [x] Map player aiming to mouse position (with controller fallback) including smoothing, dead zones, and sensitivity tuning.  
@@ -176,7 +159,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 40. [x] Expand locomotion animations (idle, walk, run, crouch) to adapt leg poses to movement speed and direction changes.  
 
 41. [x] Create attack-specific arm animation sets (fists, melee, ranged) that blend with aim direction and combo timing.  
->>>>>>> Stashed changes
 
 
 
@@ -186,15 +168,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 ## Phase 7: Game Modes
 
-<<<<<<< Updated upstream
-42. [ ] Implement Story Campaign mode (basic missions).  
-
-43. [ ] Build Survival Mode (enemy waves).  
-
-44. [ ] Build Sandbox Skirmish mode with full arsenal.  
-
-45. [ ] Build Massive Co-Op mode (up to 100 players/NPCs).  
-=======
 42. [x] Implement Story Campaign mode (basic missions). (Three-mission story flow with briefing, objectives, rewards, and HUD integration.)  
 
 43. [x] Build Survival Mode (enemy waves). (Scaled waves, survival rewards, defeat handling, and HUD scoreboard with keybind toggles.)  
@@ -202,7 +175,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 44. [x] Build Sandbox Skirmish mode with full arsenal. (Toggleable K key skirmish with full arsenal, infinite ammo, wave spawns, and HUD scoreboard.)  
 
 45. [x] Build Massive Co-Op mode (up to 100 players/NPCs). (F9 toggles simulated 100-player coop swarm with remote player pooling, stats, and HUD telemetry.)  
->>>>>>> Stashed changes
 
 
 
@@ -210,43 +182,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 
 
-<<<<<<< Updated upstream
-## Phase 8: UI & Frontend Flow
-
-46. [ ] Design and implement the main menu UI (branding, background, primary navigation).  
-
-47. [ ] Build Create Game / mode selection flow with campaign, survival, sandbox, and co-op configuration panels.  
-
-48. [ ] Wire up lobby/pre-game setup screens (loadouts, squad slots, difficulty) with local persistence.  
-
-49. [ ] Implement in-game clickable UI elements (context prompts, inventory, interaction overlays) supporting mouse and touch input.  
-
-50. [ ] Refresh in-game HUD and menus to reflect new aiming systems, weapon states, and contextual prompts.  
-
-
-
----
-
-
-
-## Phase 9: Replayability & Polish
-
-51. [ ] Create custom loadout system.  
-
-52. [ ] Add cosmetic customization (helmets, armor, jetpacks).  
-
-53. [ ] Add scenario editor for player-made maps.  
-
-54. [ ] Optimize performance for large-scale battles.  
-
-55. [ ] Balance all weapons, gadgets, and vehicles.  
-
-56. [ ] Add sound effects and soundtrack.  
-
-57. [ ] Add particle FX (explosions, smoke, blood, sparks). (Event-driven muzzle, shield, and throwable bursts prototyped via placeholder particle/tonal system.)
-
-58. [ ] Improve UI/UX (menus, HUD, inventory).  
-=======
 ## Phase 8: Replayability & Polish
 
 46. [ ] Create custom loadout system.  
@@ -264,7 +199,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 52. [ ] Add particle FX (explosions, smoke, blood, sparks). (Event-driven muzzle, shield, and throwable bursts prototyped via placeholder particle/tonal system.)
 
 53. [ ] Improve UI/UX (menus, HUD, inventory).  
->>>>>>> Stashed changes
 
 
 
@@ -272,8 +206,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 
 
-<<<<<<< Updated upstream
-=======
 ## Phase 9: UI & Frontend Flow
 
 54. [ ] Design and implement the main menu UI (branding, background, primary navigation).  
@@ -291,7 +223,6 @@ The final build will be compacted into a **single self-contained HTML file** usi
 ---
 
 
->>>>>>> Stashed changes
 ## Phase 10: Testing & Release
 
 59. [ ] Conduct internal alpha testing.  
@@ -338,10 +269,7 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 
 
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
 
 
 
