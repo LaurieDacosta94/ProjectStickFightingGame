@@ -1,4 +1,4 @@
-# Throwable Effect Notes
+﻿# Throwable Effect Notes
 
 ## Flashbang
 - Fuse: 1.2s arc tuned for quick tosses.
@@ -13,10 +13,11 @@
 ## Shared Notes
 - All throwables support per-weapon cooldowns via `throwable.cooldownSeconds`.
 - Effect routing pivots on `throwable.effectType` (explosive, flash, smoke) so future C4/utility entries can hook unique behaviour.
-- Detonations now broadcast `throwable:explosion`, `throwable:flash-burst`, and `throwable:smoke-detonate` (plus smoke spawn/dissipate hooks) so placeholder audio and particles stay synchronized.
+- Detonations now broadcast `throwable:explosion`, `throwable:flash-burst`, and `throwable:smoke-detonate` (plus smoke spawn/dissipate hooks) so audio layer and particles stay synchronized.
 
 
 ## Grapple Rig
 - Anchor range ~320px forward with autoclamped bounds to keep shots in the arena.
 - Travel phase speeds the tether out (900 px/s) before pulling the player at 760 px/s.
 - Shares the gadget cooldown, letting turrets and grapples rotate without separate meters.
+

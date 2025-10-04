@@ -1,13 +1,19 @@
-import "./styles.css";
+﻿import "./styles.css";
 import { context } from "./environment/canvas.js";
 import { getCamera } from "./state/camera.js";
 import { initializeEnvironmentControls } from "./state/environment.js";
 
 import { initializeInput } from "./core/input/index.js";
 import { initializeWeaponControls } from "./core/combat/weapons.js";
-import { initializePlaceholderAudio } from "./core/audio/placeholder.js";
+import { initializeLoadoutSystem } from "./core/loadout/index.js";
+import { initializeCosmeticSystem } from "./core/cosmetics/index.js";
+import { initializeScenarioSystem } from "./core/scenario/index.js";
+import { initializeAudioSystem } from "./core/audio/index.js";
 import { initializeP2PNetworking } from "./core/network/p2p.js";
 import { drawBackground, drawDestructibles, drawInteractables, drawVehicles, drawSupplyDrops, drawRemotePlayers, drawServerBrowser, drawSquadmates, drawStickman, drawHitboxes, drawTrainingDummy, drawEnemies, drawHud, drawProjectilesLayer, drawGadgetsLayer } from "./core/render/index.js";
+import { drawLoadoutOverlay } from "./core/render/loadout.js";
+import { drawCosmeticOverlay } from "./core/render/cosmetics.js";
+import { drawScenarioOverlay } from "./core/render/scenario.js";
 import { drawDebugArena } from "./core/world/arena.js";
 import { drawDamagePopups } from "./core/effects/damage.js";
 import { drawLighting } from "./core/effects/lighting.js";
@@ -16,7 +22,10 @@ import { updateGame } from "./core/world/update.js";
 
 initializeInput();
 initializeWeaponControls();
-initializePlaceholderAudio();
+initializeLoadoutSystem();
+initializeCosmeticSystem();
+initializeScenarioSystem();
+initializeAudioSystem();
 initializeP2PNetworking();
 initializeEnvironmentControls();
 
@@ -54,8 +63,12 @@ function loop(timestamp) {
 
   drawHud();
   drawServerBrowser();
+  drawLoadoutOverlay();
+  drawCosmeticOverlay();
+  drawScenarioOverlay();
 
   window.requestAnimationFrame(loop);
 }
 
 window.requestAnimationFrame(loop);
+

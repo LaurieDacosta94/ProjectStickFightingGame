@@ -4,6 +4,7 @@ import { trainingDummy, enemies } from "../../state/entities.js";
 import { applyDamageToDummy, applyDamageToEnemy } from "./damageHandlers.js";
 import { handleProjectileCollision } from "../world/destructibles.js";
 import { spawnDynamicLight } from "../effects/lighting.js";
+import { spawnGroundDust, spawnImpactSparks } from "../effects/particles.js";
 
 const projectiles = [];
 
@@ -69,6 +70,12 @@ function updateProjectiles(delta) {
     }
 
     if (projectile.y + projectile.radius >= GROUND_Y) {
+      spawnGroundDust({
+        x: projectile.x,
+        y: GROUND_Y - 6,
+        amount: Math.round(5 + projectile.radius * 0.8),
+        speed: 120 + Math.abs(projectile.vx) * 0.3
+      });
       projectile.life = 0;
       continue;
     }
@@ -104,6 +111,14 @@ function updateProjectiles(delta) {
     }
     if (projectile.life > 0) {
       if (handleProjectileCollision(projectile)) {
+        spawnImpactSparks({
+          x: projectile.x,
+          y: projectile.y,
+          amount: Math.round(6 + Math.random() * 4),
+          speed: 220 + Math.abs(projectile.vx) * 0.4,
+          spread: Math.PI * 0.9,
+          angle: Math.atan2(projectile.vy, projectile.vx) + Math.PI
+        });
         projectile.life = 0;
         continue;
       }

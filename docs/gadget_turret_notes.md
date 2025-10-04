@@ -1,4 +1,4 @@
-# Deployable Turret Notes
+﻿# Deployable Turret Notes
 
 ## Gameplay Intent
 - Quick-drop sentry that buys space while the player repositions or swaps weapons.
@@ -35,4 +35,5 @@
 - Dampens knockback and launch on blocked hits so the player can stay grounded during scrums.
 - Shield status reports through the HUD (strength bar) and flashes on impact; activation shares the gadget cooldown with turrets and grapples.
 \n\n## Polish Considerations\n- Shield bubble: hook impact/shatter SFX and particle rings when `absorbShieldHit` fires or the bubble expires.\n- Turret/SMG: share muzzle flash assets so upcoming audio pass can reuse events.\n
-\n\n### Event Hooks\n- `shield:hit`, `shield:shatter`, and `shield:end` fire from `src/core/gadgets/shield.js` to coordinate audio/FX cues.\n- `weapon:muzzle-flash` events can be shared between turret and SMG implementations for consistent visuals.\n- `src/core/events/polishDebug.js` mirrors those events with placeholder HUD text and shield ring overlays so designers can validate hook timing ahead of the real FX/audio pass.\n- `src/core/audio/placeholder.js` supplies temporary tones on the same events so gadget timing reads audibly until bespoke SFX drop in.\n- `src/core/effects/particles.js` fires quick muzzle sparks and shield rings from those events so placeholder visuals land with the audio pass.\n- Throwable detonation events (`throwable:explosion`, `throwable:flash-burst`, `throwable:smoke-detonate`) now mirror through the same scaffolding so gadgets and throwables share timing cues.\n
+\n\n### Event Hooks\n- `shield:hit`, `shield:shatter`, and `shield:end` fire from `src/core/gadgets/shield.js` to coordinate audio/FX cues.\n- `weapon:muzzle-flash` events can be shared between turret and SMG implementations for consistent visuals.\n- `src/core/events/polishDebug.js` mirrors those events with debug HUD text and shield ring overlays for quick iteration.\n- `src/core/audio/index.js` renders the procedural tones on the same events so gadget timing reads audibly.\n- `src/core/effects/particles.js` now powers muzzle sparks, shield shards, and dust bursts from those events for cohesive visuals.\n- Throwable detonation events (`throwable:explosion`, `throwable:flash-burst`, `throwable:smoke-detonate`) now mirror through the same hooks so gadgets and throwables share timing cues.\n
+

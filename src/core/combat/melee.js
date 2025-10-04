@@ -79,7 +79,7 @@ function resolveHitDetection() {
 function fireEquippedWeaponProjectile() {
   const weapon = getCurrentWeapon();
   if (!weapon || !weapon.category?.startsWith("ranged")) {
-    return;
+    return false;
   }
 
   if (!consumeAmmo(weapon.id)) {
@@ -90,20 +90,40 @@ function fireEquippedWeaponProjectile() {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("weapon:reload-start", { detail: { weaponId: weapon.id } }));
       }
-    }    return;
+    }
+      return false;
   }
 
   const projectileConfig = weapon.projectile ?? {};
   const speed = projectileConfig.speed ?? 460;
-  const facing = stickman.facing;
-  const baseVx = facing * speed;
-  const baseVy = projectileConfig.initialVy ?? -12;
-  const magnitude = Math.hypot(baseVx, baseVy);
-  const baseAngle = Math.atan2(baseVy, baseVx);
+
+  const aim = stickman.aim ?? null;
+  const rawDirX = Number.isFinite(aim?.vectorX) ? aim.vectorX : (stickman.facing || 1);
+  const rawDirY = Number.isFinite(aim?.vectorY) ? aim.vectorY : 0;
+  const normLength = Math.hypot(rawDirX, rawDirY) || 1;
+  const dirX = rawDirX / normLength;
+  const dirY = rawDirY / normLength;
+
+  const anchorX = Number.isFinite(aim?.anchorX) ? aim.anchorX : stickman.x;
+  const anchorY = Number.isFinite(aim?.anchorY) ? aim.anchorY : stickman.y + 24;
+
+  const muzzleDistance = projectileConfig.muzzleDistance ?? 38;
+  const sideOffset = projectileConfig.muzzleSideOffset ?? 0;
+  const verticalOffset = projectileConfig.muzzleVerticalOffset ?? 0;
+
+  const perpX = -dirY;
+  const perpY = dirX;
+
+  const muzzleX = anchorX + dirX * muzzleDistance + perpX * sideOffset;
+  const muzzleY = anchorY + dirY * muzzleDistance + perpY * sideOffset + verticalOffset;
+
+  const baseAngle = Math.atan2(dirY, dirX);
   const spreadAngle = registerShot(weapon.id);
   const finalAngle = baseAngle + spreadAngle;
-  const vx = Math.cos(finalAngle) * magnitude;
-  const vy = Math.sin(finalAngle) * magnitude;
+  const vx = Math.cos(finalAngle) * speed + (projectileConfig.initialVx ?? 0);
+  const vy = Math.sin(finalAngle) * speed + (projectileConfig.initialVy ?? 0);
+
+  const facing = vx >= 0 ? 1 : -1;
 
   if (weapon.recoil) {
     applyRecoil(weapon.recoil);
@@ -113,12 +133,22 @@ function fireEquippedWeaponProjectile() {
   }
 
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("weapon:muzzle-flash", { detail: { weaponId: weapon.id, x: stickman.x + facing * 34, y: stickman.y + 20, facing } }));
+    window.dispatchEvent(
+      new CustomEvent("weapon:muzzle-flash", {
+        detail: {
+          weaponId: weapon.id,
+          x: muzzleX,
+          y: muzzleY,
+          facing,
+          direction: { x: dirX, y: dirY }
+        }
+      })
+    );
   }
 
   spawnProjectile({
-    x: stickman.x + facing * 34,
-    y: stickman.y + 20,
+    x: muzzleX,
+    y: muzzleY,
     vx,
     vy,
     radius: projectileConfig.radius ?? 5,
@@ -133,9 +163,23 @@ function fireEquippedWeaponProjectile() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("weapon:shot-fired", { detail: { weaponId: weapon.id } }));
   }
+
+  return true;
 }
 
 export { spawnHitbox, updateHitboxes, resolveHitDetection, applyDamageToEnemy, applyDamageToPlayer, fireEquippedWeaponProjectile };
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

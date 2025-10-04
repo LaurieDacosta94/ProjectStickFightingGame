@@ -1,4 +1,4 @@
-import { WEAPON_DEFINITIONS } from "../../config/weapons.js";
+﻿import { WEAPON_DEFINITIONS } from "../../config/weapons.js";
 import { stickman } from "../../state/entities.js";
 import { weaponState, getCurrentWeaponId, setActiveWeaponByIndex, getWeaponInventory } from "../../state/weapons.js";
 import { getAmmoStatus, ensureAmmoEntry, cancelReload } from "../../state/ammo.js";
@@ -41,6 +41,7 @@ function equipWeaponIndex(index) {
 
   const ammoStatus = getAmmoStatus(stickman.equippedWeaponId);
   stickman.reloading = ammoStatus?.reloading ?? false;
+  stickman.fireCooldown = 0;
 
   previousWeaponState.id = stickman.equippedWeaponId;
   return true;
@@ -88,3 +89,4 @@ export {
   initializeWeaponControls,
   getWeaponSlots
 };
+

@@ -1,4 +1,7 @@
-﻿const input = Object.seal({
+import { canvas } from "../../environment/canvas.js";
+import { getCamera } from "../../state/camera.js";
+
+const input = Object.seal({
   left: false,
   right: false,
   jump: false,
@@ -27,7 +30,52 @@
   buildConfirmBuffered: false,
   buildCancelBuffered: false,
   survivalToggleBuffered: false,
+  sandboxToggleBuffered: false,
+  coopToggleBuffered: false,
+  campaignStartBuffered: false,
 });
+
+const pointer = Object.seal({
+  screenX: canvas.width * 0.5,
+  screenY: canvas.height * 0.5,
+  worldX: canvas.width * 0.5,
+  worldY: canvas.height * 0.5,
+  active: false,
+  lastUpdate: 0
+});
+
+function refreshPointerWorld() {
+  const camera = getCamera();
+  const offsetX = camera?.offsetX ?? 0;
+  const offsetY = camera?.y ?? 0;
+  pointer.worldX = pointer.screenX + offsetX;
+  pointer.worldY = pointer.screenY + offsetY;
+}
+
+function updatePointerPosition(event) {
+  if (!canvas || !event) {
+    refreshPointerWorld();
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const localX = event.clientX - rect.left;
+  const localY = event.clientY - rect.top;
+  const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+  const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
+  pointer.screenX = localX * scaleX;
+  pointer.screenY = localY * scaleY;
+  pointer.active = localX >= 0 && localX <= rect.width && localY >= 0 && localY <= rect.height;
+  pointer.lastUpdate = typeof performance !== "undefined" ? performance.now() : Date.now();
+  refreshPointerWorld();
+}
+
+function handlePointerMove(event) {
+  updatePointerPosition(event);
+}
+
+function handlePointerLeave() {
+  pointer.active = false;
+}
 
 let initialized = false;
 
@@ -90,6 +138,18 @@ function handleKey(isDown, event) {
         event.preventDefault();
       }
       break;
+    case "KeyK":
+      if (isDown) {
+        input.sandboxToggleBuffered = true;
+        event.preventDefault();
+      }
+      break;
+    case "F9":
+      if (isDown) {
+        input.coopToggleBuffered = true;
+        event.preventDefault();
+      }
+      break;
     case "KeyJ":
     case "KeyF":
       if (isDown) {
@@ -126,6 +186,12 @@ function handleKey(isDown, event) {
     case "KeyT":
       if (isDown) {
         input.squadCommandCycleBuffered = true;
+        event.preventDefault();
+      }
+      break;
+    case "KeyQ":
+      if (isDown) {
+        input.campaignStartBuffered = true;
         event.preventDefault();
       }
       break;
@@ -231,6 +297,7 @@ function handleKey(isDown, event) {
 }
 
 function handleMouseDown(event) {
+  updatePointerPosition(event);
   if (event.button === 0) {
     input.attackBuffered = true;
     input.attackDown = true;
@@ -243,6 +310,7 @@ function handleMouseDown(event) {
 }
 
 function handleMouseUp(event) {
+  updatePointerPosition(event);
   if (event.button === 0) {
     input.attackDown = false;
     event.preventDefault();
@@ -276,6 +344,7 @@ function resetInputs() {
   input.serverBrowserAcceptAnswerBuffered = false;
   input.serverBrowserCopyCandidatesBuffered = false;
   input.serverBrowserPasteCandidatesBuffered = false;
+  input.campaignStartBuffered = false;
 }
 
 function initializeInput() {
@@ -286,12 +355,22 @@ function initializeInput() {
   window.addEventListener("keyup", (event) => handleKey(false, event));
   window.addEventListener("mousedown", handleMouseDown);
   window.addEventListener("mouseup", handleMouseUp);
+  window.addEventListener("mousemove", handlePointerMove);
+  window.addEventListener("mouseleave", handlePointerLeave);
   window.addEventListener("contextmenu", (event) => event.preventDefault());
   window.addEventListener("blur", resetInputs);
+  refreshPointerWorld();
   initialized = true;
 }
 
-export { input, initializeInput, resetInputs };
+
+export { input, pointer, initializeInput, resetInputs, refreshPointerWorld };
+
+
+
+
+
+
 
 
 

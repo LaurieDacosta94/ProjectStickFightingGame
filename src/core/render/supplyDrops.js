@@ -1,5 +1,6 @@
 
 import { context } from "../../environment/canvas.js";
+import { isWithinView, recordVisibility } from "./culling.js";
 import { SUPPLY_DROP_SETTINGS, SUPPLY_DROP_TYPES } from "../../config/supplyDrops.js";
 import { clamp } from "../utils/math.js";
 import { getSupplyDrops } from "../world/supplyDrops.js";
@@ -64,6 +65,11 @@ function drawSupplyDrops() {
   context.font = "15px 'Segoe UI', Arial, sans-serif";
 
   for (const drop of drops) {
+    const culled = !isWithinView(drop.x, 60, 360);
+    recordVisibility("resource", culled);
+    if (culled) {
+      continue;
+    }
     drawCrate(drop);
     const typeDef = SUPPLY_DROP_TYPES[drop.typeId];
     if (drop.state !== "descending") {

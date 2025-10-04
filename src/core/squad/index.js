@@ -4,6 +4,7 @@ import { SQUAD_COMMANDS, SQUAD_SETTINGS } from "../../config/squad.js";
 import { stickman, squadmates, enemies, getTotalHeight } from "../../state/entities.js";
 import { resolvePlatformLanding } from "../world/arena.js";
 import { spawnProjectile } from "../combat/projectiles.js";
+import { getShoulderAnchor } from "../aim/index.js";
 
 function getActiveCommand() {
   return SQUAD_COMMANDS[stickman.squadCommandIndex % SQUAD_COMMANDS.length] ?? SQUAD_COMMANDS[0];
@@ -83,14 +84,37 @@ function fireAtTarget(entity, target, delta) {
     return;
   }
   entity.fireCooldown = SQUAD_SETTINGS.supportFireCooldown;
-  const facing = target.x >= entity.x ? 1 : -1;
-  const muzzleX = entity.x + facing * 24;
-  const muzzleY = entity.y + getTotalHeight(POSES.standing) * 0.4;
+
+  const aim = entity.aim ?? null;
+  const anchor = aim && Number.isFinite(aim.anchorX) && Number.isFinite(aim.anchorY)
+    ? { x: aim.anchorX, y: aim.anchorY }
+    : getShoulderAnchor(entity, POSES.standing);
+  const targetX = target.x;
+  const targetY = target.y + target.height * 0.35;
+  const rawDirX = aim && Number.isFinite(aim.vectorX) ? aim.vectorX : targetX - anchor.x;
+  const rawDirY = aim && Number.isFinite(aim.vectorY) ? aim.vectorY : targetY - anchor.y;
+  const norm = Math.hypot(rawDirX, rawDirY) || 1;
+  const dirX = rawDirX / norm;
+  const dirY = rawDirY / norm;
+  const perpX = -dirY;
+  const perpY = dirX;
+
+  const muzzleDistance = 32;
+  const lateralOffset = 4 * (entity.roleIndex ?? 0) - 4;
+  const muzzleX = anchor.x + dirX * muzzleDistance + perpX * lateralOffset;
+  const muzzleY = anchor.y + dirY * muzzleDistance + perpY * lateralOffset;
+
+  const speed = SQUAD_SETTINGS.projectileSpeed;
+  const verticalLift = -18;
+  const vx = dirX * speed;
+  const vy = dirY * speed + verticalLift;
+  const facing = vx >= 0 ? 1 : -1;
+
   spawnProjectile({
     x: muzzleX,
     y: muzzleY,
-    vx: facing * SQUAD_SETTINGS.projectileSpeed,
-    vy: -20,
+    vx,
+    vy,
     radius: 5,
     lifetime: 0.8,
     color: facing > 0 ? "#8cffd4" : "#a0ffe1",

@@ -82,7 +82,7 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 ## Phase 3: Vehicles & Support
 
-15. [x] Implement basic vehicle framework (enter/exit, control switching). (Player can now mount/dismount with E, with dedicated vehicle control loop.)  
+15. [x] Implement basic vehicle framework (enter/exit, control switching). (Player can now mount/dismount with E, with dedicated vehicle control loop.)    
 
 16. [x] Add land vehicles (cars, tanks, mechs). (Recon Buggy prototype available for testing in the arena.)  
 
@@ -184,21 +184,21 @@ The final build will be compacted into a **single self-contained HTML file** usi
 
 ## Phase 8: Replayability & Polish
 
-46. [ ] Create custom loadout system.  
+46. [x] Create custom loadout system (keyboard editor with persistent slots).  
 
-47. [ ] Add cosmetic customization (helmets, armor, jetpacks).  
+47. [x] Add cosmetic customization (helmets, armor, jetpacks) with F7 overlay and persistent selections.  
 
-48. [ ] Add scenario editor for player-made maps.  
+48. [x] Add scenario editor for player-made maps (F8 overlay with persistent scenarios).  
 
-49. [ ] Optimize performance for large-scale battles.  
+49. [x] Optimize performance for large-scale battles (viewport culling + frame metrics).  
 
-50. [ ] Balance all weapons, gadgets, and vehicles.  
+50. [x] Balance all weapons, gadgets, and vehicles. (Damage, recoil, ammo, and vehicle stats retuned; new fire cadence cooldown wired into combat loop.)    
 
-51. [ ] Add sound effects and soundtrack.  
+51. [x] Add sound effects and soundtrack. (Event-driven Web Audio engine now ships with procedural SFX bank and adaptive ambient score.)    
 
-52. [ ] Add particle FX (explosions, smoke, blood, sparks). (Event-driven muzzle, shield, and throwable bursts prototyped via placeholder particle/tonal system.)
+52. [x] Add particle FX (explosions, smoke, blood, sparks). (Expanded particle engine now handles blood sprays, impact sparks, dust plumes, and synced explosive debris.)
 
-53. [ ] Improve UI/UX (menus, HUD, inventory).  
+53. [x] Improve UI/UX (menus, HUD, inventory). (Modernized HUD with panels, hotbar, and mode cards for clarity.)
 
 
 
@@ -254,6 +254,9 @@ The final build will be compacted into a **single self-contained HTML file** usi
 68. [ ] Support modding tools for the community.  
 
 69. [ ] Develop esports/competitive mode.  
+
+
+
 
 
 

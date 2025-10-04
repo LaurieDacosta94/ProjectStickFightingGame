@@ -1,4 +1,5 @@
 ﻿import { context } from "../../environment/canvas.js";
+import { isWithinView, recordVisibility } from "./culling.js";
 import { getDestructibles } from "../../state/destructibles.js";
 import { getElapsedTime } from "../utils/time.js";
 import { clamp } from "../utils/math.js";
@@ -263,6 +264,12 @@ function drawDestructibles() {
 
   context.save();
   for (const destructible of items) {
+    const halfWidth = ((destructible.width ?? 120) * 0.5) + 50;
+    const culled = !isWithinView(destructible.x, halfWidth, 320);
+    recordVisibility("destructible", culled);
+    if (culled) {
+      continue;
+    }
     drawDestructible(destructible, elapsed);
   }
   context.restore();

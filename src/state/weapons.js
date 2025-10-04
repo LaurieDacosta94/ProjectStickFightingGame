@@ -1,4 +1,4 @@
-﻿import { DEFAULT_LOADOUT, WEAPON_DEFINITIONS } from "../config/weapons.js";
+import { DEFAULT_LOADOUT, WEAPON_DEFINITIONS } from "../config/weapons.js";
 import { stickman } from "./entities.js";
 
 const weaponState = {
@@ -51,6 +51,24 @@ function getThrowableCount() {
     .length;
 }
 
+function setWeaponInventory(newInventory = [], { equipId } = {}) {
+  const provided = Array.isArray(newInventory) ? newInventory : [];
+  const unique = Array.from(new Set(provided.filter((id) => WEAPON_DEFINITIONS[id])));
+  const inventory = unique.length > 0 ? unique : [...DEFAULT_LOADOUT];
+  weaponState.inventory = inventory;
+  let desiredId = equipId && inventory.includes(equipId) ? equipId : stickman.equippedWeaponId;
+  if (!desiredId || !inventory.includes(desiredId)) {
+    desiredId = inventory[0];
+  }
+  stickman.equippedWeaponId = desiredId;
+  weaponState.activeIndex = inventory.indexOf(desiredId);
+  ensureEquippedWeaponValid();
+}
+
+function resetWeaponInventory() {
+  setWeaponInventory(DEFAULT_LOADOUT, { equipId: DEFAULT_LOADOUT[0] });
+}
+
 function ensureEquippedWeaponValid() {
   const existingIndex = weaponState.inventory.indexOf(stickman.equippedWeaponId);
   if (existingIndex >= 0) {
@@ -65,4 +83,6 @@ function ensureEquippedWeaponValid() {
 
 ensureEquippedWeaponValid();
 
-export { weaponState, getCurrentWeaponId, setActiveWeaponByIndex, getWeaponInventory, getThrowableCount, addWeaponToInventory };
+export { weaponState, getCurrentWeaponId, setActiveWeaponByIndex, getWeaponInventory, getThrowableCount, addWeaponToInventory, setWeaponInventory, resetWeaponInventory };
+
+

@@ -1,4 +1,5 @@
 ﻿import { context } from "../../environment/canvas.js";
+import { isWithinView, recordVisibility } from "./culling.js";
 import { getInteractables } from "../../state/interactables.js";
 import { clamp } from "../utils/math.js";
 import { getElapsedTime } from "../utils/time.js";
@@ -151,6 +152,12 @@ function drawInteractables() {
   const elapsed = getElapsedTime();
   context.save();
   for (const interactable of items) {
+    const halfWidth = ((interactable.width ?? 80) * 0.5) + 36;
+    const culled = !isWithinView(interactable.x, halfWidth, 280);
+    recordVisibility("interactable", culled);
+    if (culled) {
+      continue;
+    }
     drawInteractable(interactable, elapsed);
   }
   context.restore();

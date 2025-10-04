@@ -8,14 +8,19 @@ import { clamp } from "../utils/math.js";
 import { getElapsedTime } from "../utils/time.js";
 import { getCurrentWeapon, getWeaponSlots } from "../combat/weapons.js";
 import { getAmmoStatus } from "../../state/ammo.js";
+import { getCosmeticSelections, getCosmeticOption } from "../../state/cosmetics.js";
 import { drawProjectiles } from "../combat/projectiles.js";
 import { drawThrowables } from "../combat/throwables.js";
 import { drawGadgets, getGadgetStatus } from "../gadgets/index.js";
 import { drawSupplyDrops } from "./supplyDrops.js";
+import { renderStickFigure, getWeaponVisual } from "./stickFigure.js";
 import { drawDestructibles } from "./destructibles.js";
 import { drawBuildings, drawBuildPreview } from "./buildings.js";
 import { drawSalvagePickups } from "./resources.js";
 import { getSurvivalHudStatus } from "../survival/index.js";
+import { getCoopHudStatus } from "../../state/coop.js";
+import { getSandboxHudStatus } from "../sandbox/index.js";
+import { getCampaignHudStatus } from "../campaign/index.js";
 import { drawInteractables } from "./interactables.js";
 import { getBuildingHudStatus } from "../building/index.js";
 import { drawParticles } from "../effects/particles.js";
@@ -24,9 +29,198 @@ import { getRecoilOffset } from "../../state/recoil.js";
 import { getSupplyDropStatus } from "../world/supplyDrops.js";
 import { getP2PStatus } from "../network/p2p.js";
 import { getSquadStatus } from "../squad/index.js";
+import { setActiveCamera, isWithinView, resetPerformanceStats, recordVisibility, performanceStats } from "./culling.js";
 import { getPlayerVehicle } from "../vehicles/index.js";
+import { getStickmanShoulderAnchor } from "../aim/index.js";
 
+const SQUAD_WEAPON_TEMPLATE = { id: "squadCarbine", name: "Support Carbine", category: "ranged-mid" };
+
+
+const UI_TITLE_FONT = "16px 'Segoe UI Semibold', 'Segoe UI', Arial, sans-serif";
+const UI_TEXT_FONT = "14px 'Segoe UI', Arial, sans-serif";
+const UI_SMALL_FONT = "12px 'Segoe UI', Arial, sans-serif";
+
+function drawRoundedRectPath(ctx, x, y, width, height, radius = 8) {
+  const r = Math.min(radius, width * 0.5, height * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.arcTo(x + width, y, x + width, y + r, r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.arcTo(x + width, y + height, x + width - r, y + height, r);
+  ctx.lineTo(x + r, y + height);
+  ctx.arcTo(x, y + height, x, y + height - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function drawUiPanel(x, y, width, height, options = {}) {
+  const ctx = context;
+  ctx.save();
+  const radius = options.radius ?? 12;
+  drawRoundedRectPath(ctx, x, y, width, height, radius);
+  ctx.fillStyle = options.fill ?? "rgba(12, 18, 28, 0.78)";
+  ctx.fill();
+  if (options.stroke !== false) {
+    ctx.strokeStyle = options.stroke ?? "rgba(140, 170, 210, 0.22)";
+    ctx.lineWidth = options.strokeWidth ?? 1.4;
+    ctx.stroke();
+  }
+  if (options.accent) {
+    ctx.fillStyle = options.accent;
+    ctx.fillRect(x, y, width, options.accentHeight ?? 3);
+  }
+  ctx.restore();
+}
+
+function drawUiProgressBar(x, y, width, height, progress, options = {}) {
+  const ctx = context;
+  const radius = options.radius ?? height * 0.5;
+  const clampedProgress = clamp(progress ?? 0, 0, 1);
+  ctx.save();
+  drawRoundedRectPath(ctx, x, y, width, height, radius);
+  ctx.fillStyle = options.background ?? "rgba(255, 255, 255, 0.08)";
+  ctx.fill();
+  ctx.clip();
+  ctx.fillStyle = options.fill ?? "#8cffd4";
+  ctx.fillRect(x, y, width * clampedProgress, height);
+  ctx.restore();
+  if (options.border !== false) {
+    ctx.save();
+    drawRoundedRectPath(ctx, x, y, width, height, radius);
+    ctx.strokeStyle = options.border ?? "rgba(140, 170, 210, 0.35)";
+    ctx.lineWidth = options.borderWidth ?? 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawUiTag(text, x, y, options = {}) {
+  const ctx = context;
+  ctx.save();
+  ctx.font = UI_SMALL_FONT;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const paddingX = options.paddingX ?? 10;
+  const height = options.height ?? 20;
+  const width = Math.ceil(ctx.measureText(text).width) + paddingX * 2;
+  drawRoundedRectPath(ctx, x, y, width, height, height * 0.5);
+  ctx.fillStyle = options.background ?? "rgba(140, 170, 220, 0.32)";
+  ctx.fill();
+  if (options.border) {
+    ctx.strokeStyle = options.border;
+    ctx.stroke();
+  }
+  ctx.fillStyle = options.color ?? "#e0e8ff";
+  ctx.fillText(text, x + paddingX, y + height * 0.5 + (options.offsetY ?? 0));
+  ctx.restore();
+  return width;
+}
+
+function getCategoryAccent(category) {
+  if (!category) {
+    return "rgba(146, 166, 210, 0.35)";
+  }
+  if (category.startsWith("melee")) {
+    return "rgba(255, 139, 139, 0.45)";
+  }
+  if (category.startsWith("ranged")) {
+    return "rgba(124, 214, 255, 0.45)";
+  }
+  if (category === "throwable") {
+    return "rgba(255, 205, 135, 0.45)";
+  }
+  if (category === "gadget") {
+    return "rgba(140, 255, 212, 0.45)";
+  }
+  return "rgba(146, 166, 210, 0.35)";
+}
+
+function drawWeaponHotbar(slots, currentWeapon, ammoStatus, canvasWidth, canvasHeight) {
+  if (!slots || slots.length === 0) {
+    return;
+  }
+  const spacing = 12;
+  const maxSlots = slots.length;
+  const availableWidth = Math.min(canvasWidth * 0.9, 560);
+  const slotWidth = Math.min(118, Math.max(72, (availableWidth - spacing * (maxSlots - 1)) / maxSlots));
+  const slotHeight = slotWidth * 0.6;
+  const totalWidth = slotWidth * maxSlots + spacing * (maxSlots - 1);
+  const startX = (canvasWidth - totalWidth) / 2;
+  const y = canvasHeight - slotHeight - 16;
+
+  slots.forEach((slot, index) => {
+    const x = startX + index * (slotWidth + spacing);
+    const isActive = slot.id === currentWeapon?.id;
+    drawUiPanel(x, y, slotWidth, slotHeight, {
+      accent: isActive ? getCategoryAccent(slot.category ?? "") : "rgba(255, 255, 255, 0.06)",
+      fill: isActive ? "rgba(18, 28, 40, 0.94)" : "rgba(12, 18, 28, 0.78)",
+      radius: 10,
+      stroke: "rgba(140, 170, 210, 0.18)"
+    });
+    context.save();
+    context.textAlign = "left";
+    context.font = UI_SMALL_FONT;
+    context.fillStyle = isActive ? "#f5f8ff" : "#aeb7cc";
+    context.fillText(`${index + 1}`, x + 12, y + 18);
+    context.font = UI_TEXT_FONT;
+    context.fillStyle = isActive ? "#f5f8ff" : "#d7dff1";
+    const label = slot.name.length > 16 ? `${slot.name.slice(0, 15)}...` : slot.name;
+    context.fillText(label, x + 12, y + 38);
+    if (isActive && ammoStatus) {
+      const isInfinite = ammoStatus.capacity === Number.POSITIVE_INFINITY;
+      const magazineDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.magazine)}`;
+      const reserveDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.reserve)}`;
+      context.font = UI_SMALL_FONT;
+      context.fillStyle = "#9aa6bf";
+      context.fillText(`${magazineDisplay}/${reserveDisplay}`, x + 12, y + slotHeight - 12);
+    }
+    context.restore();
+  });
+}
+
+function drawUiCardStack(cards, x, startY, width) {
+  let y = startY;
+  for (const card of cards) {
+    const lines = card.lines ?? [];
+    const lineCount = lines.length;
+    const footer = card.footer ? 1 : 0;
+    const baseHeight = 40 + lineCount * 18 + footer * 20;
+    const height = Math.max(card.minHeight ?? 64, baseHeight);
+    drawUiPanel(x, y, width, height, { accent: card.accent ?? "rgba(146, 166, 210, 0.35)", fill: card.fill });
+    context.save();
+    context.textAlign = "left";
+    context.font = UI_TITLE_FONT;
+    context.fillStyle = card.titleColor ?? "#f4f7ff";
+    context.fillText(card.title, x + 16, y + 28);
+    context.font = UI_TEXT_FONT;
+    let lineY = y + 52;
+    for (const line of lines) {
+      const text = typeof line === "string" ? line : line.text;
+      const color = typeof line === "string" ? "#d7dff1" : (line.color ?? "#d7dff1");
+      context.fillStyle = color;
+      context.fillText(text, x + 16, lineY);
+      lineY += 18;
+    }
+    if (card.footer) {
+      context.font = UI_SMALL_FONT;
+      context.fillStyle = card.footerColor ?? "#9aa6bf";
+      context.fillText(card.footer, x + 16, y + height - 12);
+    }
+    context.restore();
+    y += height + 16;
+  }
+  return y;
+}
+
+function formatSeconds(seconds) {
+  const value = Math.max(0, seconds ?? 0);
+  return value >= 10 ? `${Math.round(value)}s` : `${value.toFixed(1)}s`;
+}
 function drawBackground(camera) {
+  resetPerformanceStats();
+  setActiveCamera(camera);
   const environment = getEnvironmentDefinition();
   const background = environment?.background ?? {};
   const offsetX = camera?.offsetX ?? 0;
@@ -122,6 +316,17 @@ function drawVehicles() {
       continue;
     }
 
+    const halfWidth = (definition.width ?? 120) * 0.5 + 30;
+    const culled = !isWithinView(vehicle.x, halfWidth, 320);
+    recordVisibility("vehicle", culled);
+    if (culled) {
+      continue;
+    }
+
+    if (!definition) {
+      continue;
+    }
+
     const isPlayerVehicle = playerVehicle?.id === vehicle.id;
     const isCandidate = !isPlayerVehicle && candidateId === vehicle.id;
     const bodyWidth = definition.width ?? 120;
@@ -160,44 +365,22 @@ function drawVehicles() {
 function drawRemotePlayers() {
   const players = getRemotePlayers();
   for (const remote of players) {
-    const pose = POSES.standing;
-    const headRadius = pose.headRadius;
-    const bodyLength = pose.bodyLength;
-    const legLength = pose.legLength;
-    const armLength = pose.armLength;
-    context.save();
-    context.strokeStyle = "#ff9cf7";
-    context.lineWidth = 4;
-    const headCenterY = remote.y + headRadius;
-    context.beginPath();
-    context.arc(remote.x, headCenterY, headRadius, 0, Math.PI * 2);
-    context.stroke();
-    const neckY = remote.y + headRadius * 2;
-    const torsoBottomY = neckY + bodyLength;
-    context.beginPath();
-    context.moveTo(remote.x, neckY);
-    context.lineTo(remote.x, torsoBottomY);
-    context.stroke();
-    context.beginPath();
-    context.moveTo(remote.x, neckY + 4);
-    context.lineTo(remote.x - armLength, neckY + armLength * 0.8);
-    context.moveTo(remote.x, neckY + 4);
-    context.lineTo(remote.x + armLength, neckY + armLength * 0.6);
-    context.stroke();
-    const legReach = Math.max(armLength * 0.7, 14);
-    const leftFootY = Math.min(GROUND_Y, torsoBottomY + legLength);
-    const rightFootY = Math.min(GROUND_Y, torsoBottomY + legLength * 0.95);
-    context.beginPath();
-    context.moveTo(remote.x, torsoBottomY);
-    context.lineTo(remote.x - legReach, leftFootY);
-    context.moveTo(remote.x, torsoBottomY);
-    context.lineTo(remote.x + legReach, rightFootY);
-    context.stroke();
-    context.fillStyle = "#ffd6ff";
-    context.font = "13px 'Segoe UI', Arial, sans-serif";
-    context.textAlign = "center";
-    context.fillText(remote.name ?? remote.id ?? "Peer", remote.x, remote.y - 16);
-    context.restore();
+    const culled = !isWithinView(remote.x, 36, 240);
+    recordVisibility("remote", culled);
+    if (culled) {
+      continue;
+    }
+    renderStickFigure({
+      entity: remote,
+      pose: POSES.standing,
+      aim: remote.aim ?? null,
+      weapon: null,
+      primaryColor: "#ff9cf7",
+      supportColor: "#ffc5ff",
+      lineWidth: 3.2,
+      label: remote.name ?? remote.id ?? "Peer",
+      labelColor: "#ffd6ff"
+    });
   }
 }
 
@@ -210,62 +393,39 @@ function drawSquadmates() {
     attack: "#ff9f7a",
     flank: "#ffdd6f"
   };
+  const outline = commandColors[commandId] ?? "#8cffd4";
+  const weaponVisual = getWeaponVisual(SQUAD_WEAPON_TEMPLATE);
+
   for (const ally of squadmates) {
-    const pose = POSES.standing;
-    const headRadius = pose.headRadius;
-    const bodyLength = pose.bodyLength;
-    const legLength = pose.legLength;
-    const armLength = pose.armLength;
-
-    context.save();
-    const outline = commandColors[commandId] ?? "#8cffd4";
-    context.strokeStyle = outline;
-    context.lineWidth = 4;
-    context.lineCap = "round";
-
-    const headCenterY = ally.y + headRadius;
-    context.beginPath();
-    context.arc(ally.x, headCenterY, headRadius, 0, Math.PI * 2);
-    context.stroke();
-
-    const neckY = ally.y + headRadius * 2;
-    const torsoBottomY = neckY + bodyLength;
-    context.beginPath();
-    context.moveTo(ally.x, neckY);
-    context.lineTo(ally.x, torsoBottomY);
-    context.stroke();
-
-    context.beginPath();
-    context.moveTo(ally.x, neckY + 4);
-    context.lineTo(ally.x - armLength, neckY + armLength * 0.8);
-    context.moveTo(ally.x, neckY + 4);
-    context.lineTo(ally.x + armLength, neckY + armLength * 0.6);
-    context.stroke();
-
-    const legReach = Math.max(armLength * 0.7, 14);
-    const leftFootY = Math.min(GROUND_Y, torsoBottomY + legLength);
-    const rightFootY = Math.min(GROUND_Y, torsoBottomY + legLength * 0.95);
-
-    context.beginPath();
-    context.moveTo(ally.x, torsoBottomY);
-    context.lineTo(ally.x - legReach, leftFootY);
-    context.moveTo(ally.x, torsoBottomY);
-    context.lineTo(ally.x + legReach, rightFootY);
-    context.stroke();
-
-    if ((ally.flashTimer ?? 0) > 0) {
-      const alpha = Math.min(1, ally.flashTimer / 0.12);
-      context.fillStyle = `rgba(140, 255, 212, ${alpha})`;
-      context.beginPath();
-      context.arc(ally.x + ally.facing * 30, neckY + armLength * 0.2, 12, 0, Math.PI * 2);
-      context.fill();
+    const halfWidth = 40;
+    const culled = !isWithinView(ally.x, halfWidth, 240);
+    recordVisibility("squad", culled);
+    if (culled) {
+      continue;
     }
+    const flashTimer = ally.flashTimer ?? 0;
+    const flashAmount = clamp(flashTimer / 0.18, 0, 1);
+    const highlight = ally.highlight ?? 0;
+    const activeShot = ally.fireCooldown != null ? ally.fireCooldown < 0.08 : false;
 
-    context.fillStyle = outline;
-    context.font = "14px 'Segoe UI', Arial, sans-serif";
-    context.textAlign = "center";
-    context.fillText(ally.name ?? "Ally", ally.x, ally.y - 12);
-    context.restore();
+    renderStickFigure({
+      entity: ally,
+      pose: POSES.standing,
+      aim: ally.aim,
+      weapon: SQUAD_WEAPON_TEMPLATE,
+      weaponVisual,
+      primaryColor: outline,
+      supportColor: outline,
+      lineWidth: 3.6,
+      attackInfo: ally.targetEnemyId || activeShot
+        ? { active: true, progress: activeShot ? 0.7 : 0.4, type: "ranged-mid" }
+        : null,
+      label: ally.name ?? "Ally",
+      labelColor: "#cfe4ff",
+      flashColor: flashTimer > 0 ? "rgba(140, 255, 212, 0.85)" : null,
+      flashAmount,
+      highlightColor: highlight > 0 ? "rgba(140, 255, 212, 0.45)" : null
+    });
   }
 }
 
@@ -275,63 +435,83 @@ function drawStickman() {
   }
 
   const pose = stickman.currentPose || POSES.standing;
+  const weapon = getCurrentWeapon();
   const attack = stickman.currentAttack;
-  const { headRadius, bodyLength, legLength, armLength, strideMultiplier, armSwingAmplitude, legSwingAmplitude } = pose;
-  const elapsed = getElapsedTime();
+  const attackDuration = attack ? attack.windup + attack.active + attack.recovery : 0;
+  const attackInfo = attack
+    ? {
+        active: stickman.attacking,
+        progress: attackDuration > 0 ? clamp(stickman.attackElapsed / attackDuration, 0, 1) : 0,
+        type: weapon?.category ?? ""
+      }
+    : null;
 
-  const baseStride = Math.min(1, Math.abs(stickman.vx) / SPEED);
-  const strideStrength = baseStride * strideMultiplier;
+  const cosmeticSelections = getCosmeticSelections();
+  const stickmanCosmetics = {
+    helmet: getCosmeticOption(cosmeticSelections.helmet) ?? null,
+    armor: getCosmeticOption(cosmeticSelections.armor) ?? null,
+    jetpack: getCosmeticOption(cosmeticSelections.jetpack) ?? null
+  };
 
-  let swing = Math.sin(elapsed * 8) * armSwingAmplitude * strideStrength;
-  if (stickman.attacking && attack) {
-    const totalDuration = attack.windup + attack.active + attack.recovery;
-    const progress = clamp(stickman.attackElapsed / totalDuration, 0, 1);
-    swing += Math.sin(progress * Math.PI) * 28 * stickman.facing;
+  renderStickFigure({
+    entity: stickman,
+    pose,
+    aim: stickman.aim,
+    weapon,
+    cosmetics: stickmanCosmetics,
+    primaryColor: "#f4f7ff",
+    supportColor: "#d0d4de",
+    lineWidth: 4,
+    crouching: stickman.crouching,
+    rolling: stickman.rolling,
+    attackInfo,
+    flashColor: stickman.flashBlindTimer > 0 ? "rgba(255, 255, 224, 0.7)" : null,
+    flashAmount: clamp((stickman.flashBlindTimer ?? 0) / 1.2, 0, 1),
+    highlightColor: stickman.structureShieldStrength > 0 ? "rgba(124, 214, 255, 0.55)" : null
+  });
+
+  drawPlayerAimDebug();
+}
+
+function drawPlayerAimDebug() {
+  const aim = stickman.aim;
+  if (!aim) {
+    return;
   }
 
-  context.lineWidth = 4;
-  context.strokeStyle = "#f4f7ff";
-  context.lineCap = "round";
+  const anchor = getStickmanShoulderAnchor();
+  const hasTarget = aim.active && Number.isFinite(aim.targetX) && Number.isFinite(aim.targetY);
+  const reach = hasTarget ? Math.max(72, Math.min(320, aim.magnitude || 220)) : 220;
+  const directionX = Number.isFinite(aim.vectorX) ? aim.vectorX : (stickman.facing >= 0 ? 1 : -1);
+  const directionY = Number.isFinite(aim.vectorY) ? aim.vectorY : 0;
+  const norm = Math.hypot(directionX, directionY) || 1;
+  const dirX = directionX / norm;
+  const dirY = directionY / norm;
+  const targetX = hasTarget ? aim.targetX : anchor.x + dirX * reach;
+  const targetY = hasTarget ? aim.targetY : anchor.y + dirY * reach;
 
-  const headCenterY = stickman.y + headRadius;
+  context.save();
+  context.lineWidth = 2;
+  context.setLineDash([6, 6]);
+  context.strokeStyle = hasTarget ? "rgba(124, 214, 255, 0.85)" : "rgba(160, 196, 255, 0.7)";
   context.beginPath();
-  context.arc(stickman.x, headCenterY, headRadius, 0, Math.PI * 2);
+  context.moveTo(anchor.x, anchor.y);
+  context.lineTo(targetX, targetY);
   context.stroke();
+  context.setLineDash([]);
 
-  const neckY = stickman.y + headRadius * 2;
-  const torsoBottomY = neckY + bodyLength;
+  context.fillStyle = hasTarget ? "rgba(124, 214, 255, 0.9)" : "rgba(160, 196, 255, 0.8)";
   context.beginPath();
-  context.moveTo(stickman.x, neckY);
-  context.lineTo(stickman.x, torsoBottomY);
-  context.stroke();
+  context.arc(targetX, targetY, 4, 0, Math.PI * 2);
+  context.fill();
 
+  context.fillStyle = hasTarget ? "rgba(124, 214, 255, 1)" : "rgba(160, 196, 255, 1)";
+  context.globalAlpha = 0.45;
   context.beginPath();
-  context.moveTo(stickman.x, neckY + 6);
-  context.lineTo(stickman.x - armLength, neckY + armLength + swing);
-  context.moveTo(stickman.x, neckY + 6);
-  context.lineTo(stickman.x + armLength, neckY + armLength - swing);
-  context.stroke();
-
-  const phaseOffset = Math.PI / 2;
-  const legSwingBase = Math.sin(elapsed * 8 + phaseOffset) * legSwingAmplitude * strideStrength;
-  const legReach = Math.max(armLength * 0.7, 14);
-  const leftFootY = Math.min(GROUND_Y, torsoBottomY + legLength + legSwingBase);
-  const rightFootY = Math.min(GROUND_Y, torsoBottomY + legLength - legSwingBase);
-
-  context.beginPath();
-  context.moveTo(stickman.x, torsoBottomY);
-  context.lineTo(stickman.x - legReach, leftFootY);
-  context.moveTo(stickman.x, torsoBottomY);
-  context.lineTo(stickman.x + legReach, rightFootY);
-  context.stroke();
-
-  if (stickman.rolling) {
-    context.strokeStyle = "#9aa2b1";
-    context.beginPath();
-    context.arc(stickman.x, torsoBottomY - legLength * 0.5, headRadius + 4, 0, Math.PI * 2);
-    context.stroke();
-    context.strokeStyle = "#f4f7ff";
-  }
+  context.arc(anchor.x, anchor.y, 3, 0, Math.PI * 2);
+  context.fill();
+  context.globalAlpha = 1;
+  context.restore();
 }
 
 function drawHitboxes() {
@@ -409,452 +589,506 @@ function drawTrainingDummy() {
 }
 
 function drawEnemies() {
-  const elapsed = getElapsedTime();
   for (const enemy of enemies) {
     if (enemy.health <= 0) {
       continue;
     }
 
-    const shake = enemy.shakeTimer > 0 ? Math.sin(elapsed * 32) * enemy.shakeMagnitude * clamp(enemy.shakeTimer / 0.4, 0, 1) : 0;
-    const centerX = enemy.x + shake;
+    const halfWidth = (enemy.radius ?? 22) + 48;
+    const culled = !isWithinView(enemy.x, halfWidth, 260);
+    recordVisibility("enemies", culled);
+    if (culled) {
+      continue;
+    }
+
     const headRadius = 18;
+    const bodyLength = Math.max(38, (enemy.height ?? 118) - headRadius * 2 - 26);
+    const enemyPose = { headRadius, bodyLength, legLength: 42, armLength: 30 };
     const bodyColor = enemy.stunTimer > 0 ? "#ffd166" : (enemy.flashTimer > 0 ? "#ff9488" : "#fa5b4a");
+    const flashTimer = enemy.flashTimer ?? 0;
+    const flashAmount = clamp(flashTimer / 0.18, 0, 1);
+    const highlightColor = enemy.shakeTimer > 0 ? "rgba(255, 139, 126, 0.35)" : null;
 
-    context.lineWidth = 5;
-    context.strokeStyle = bodyColor;
-    context.lineCap = "round";
-
-    const topY = enemy.y;
-    context.beginPath();
-    context.arc(centerX, topY + headRadius, headRadius, 0, Math.PI * 2);
-    context.stroke();
-
-    context.beginPath();
-    context.moveTo(centerX, topY + headRadius * 2);
-    context.lineTo(centerX, topY + enemy.height - 24);
-    context.stroke();
-
-    context.beginPath();
-    context.moveTo(centerX, topY + headRadius * 2.4);
-    context.lineTo(centerX - 30, topY + headRadius * 3);
-    context.moveTo(centerX, topY + headRadius * 2.4);
-    context.lineTo(centerX + 30, topY + headRadius * 3);
-    context.stroke();
-
-    context.beginPath();
-    context.moveTo(centerX, enemy.y + enemy.height - 26);
-    context.lineTo(centerX - 24, enemy.y + enemy.height);
-    context.moveTo(centerX, enemy.y + enemy.height - 26);
-    context.lineTo(centerX + 24, enemy.y + enemy.height);
-    context.stroke();
-
-    const barWidth = 110;
-    const barHeight = 8;
-    const barX = centerX - barWidth / 2;
-    const barY = topY - 20;
-    context.fillStyle = "#230c0a";
-    context.fillRect(barX, barY, barWidth, barHeight);
-    const ratio = enemy.health / enemy.maxHealth;
-    context.fillStyle = "#ff6f61";
-    context.fillRect(barX, barY, barWidth * clamp(ratio, 0, 1), barHeight);
-    context.strokeStyle = "#5c3029";
-    context.strokeRect(barX, barY, barWidth, barHeight);
+    renderStickFigure({
+      entity: enemy,
+      pose: enemyPose,
+      aim: enemy.aim,
+      weapon: null,
+      primaryColor: bodyColor,
+      supportColor: "#fca289",
+      lineWidth: 4.4,
+      showHealthBar: true,
+      healthRatio: enemy.health / enemy.maxHealth,
+      healthColor: "#ff6f61",
+      flashColor: flashTimer > 0 ? "rgba(255, 148, 136, 0.85)" : null,
+      flashAmount,
+      highlightColor,
+      attackInfo: enemy.state === "attack-active" ? { active: true, progress: 0.8, type: "melee-mid" } : null
+    });
   }
 }
 
+
 function drawHud() {
+  const canvasWidth = context.canvas.width;
+  const canvasHeight = context.canvas.height;
+
   const currentWeapon = getCurrentWeapon();
-  const weaponName = currentWeapon?.name ?? "Unarmed";
   const weaponSlots = getWeaponSlots();
   const ammoStatus = currentWeapon ? getAmmoStatus(currentWeapon.id) : null;
+  const gadgetStatus = getGadgetStatus();
   const recoilOffset = getRecoilOffset();
+  const buildingHud = getBuildingHudStatus();
+  const materials = Math.max(0, buildingHud?.resources ?? 0);
 
   if ((stickman.flashBlindTimer ?? 0) > 0) {
     const overlayAlpha = Math.min(0.55, (stickman.flashBlindTimer ?? 0) / 1.2);
     context.fillStyle = `rgba(255, 255, 224, ${overlayAlpha})`;
-    context.fillRect(0, 0, context.canvas.width, context.canvas.height);
+    context.fillRect(0, 0, canvasWidth, canvasHeight);
   }
 
-  context.fillStyle = "#d0d4de";
-  context.font = "16px 'Segoe UI', Arial, sans-serif";
-  context.textAlign = "left";
-  context.fillText("Move: WASD/Arrows   Jump: Space   Crouch: S   Roll: Shift   Attack: J or Left Click   Throw: G or Right Click   Build: B toggle, ,/. cycle, Left Click place", 24, 32);
-  context.fillText("Cancel Build: Esc", 24, 48);
-  context.fillText("Server Browser: L (toggle)  |  Join: Enter  |  Host: H  |  Offer: O  |  Paste: P  |  Apply: I  |  ICE Copy: M  |  ICE Apply: N", 24, 64);
-  const weaponHudX = context.canvas.width - 24;
-  let weaponHudY = 32;
   context.save();
-  context.textAlign = "right";
-  context.fillStyle = "#d0d4de";
-  context.fillText(`Weapon: ${weaponName}`, weaponHudX, weaponHudY);
-  weaponHudY += 18;
+  context.textAlign = "left";
+  context.textBaseline = "alphabetic";
+
+  const maxHealth = Math.max(1, stickman.maxHealth ?? 100);
+  const healthRatio = clamp(stickman.health / maxHealth, 0, 1);
+  const shieldMax = gadgetStatus?.shieldMaxStrength ?? 0;
+  const shieldStrength = gadgetStatus?.shieldStrength ?? 0;
+  const shieldRatio = shieldMax > 0 ? clamp(shieldStrength / shieldMax, 0, 1) : 0;
+  const shieldActive = (gadgetStatus?.shieldActive ?? false) || shieldStrength > 0;
+
+  const vitalsWidth = 308;
+  const vitalsHeight = shieldActive ? 158 : 138;
+  const vitalsX = 24;
+  const vitalsY = canvasHeight - vitalsHeight - 32;
+
+  drawUiPanel(vitalsX, vitalsY, vitalsWidth, vitalsHeight, { accent: "#5dc2ff" });
+
+  context.font = UI_TITLE_FONT;
+  context.fillStyle = "#f4f7ff";
+  context.fillText("Player Vitals", vitalsX + 16, vitalsY + 30);
+
+  context.font = UI_TEXT_FONT;
+  context.fillStyle = "#d7dff1";
+  context.fillText(`Health ${Math.round(stickman.health)} / ${Math.round(maxHealth)}`, vitalsX + 16, vitalsY + 56);
+  drawUiProgressBar(vitalsX + 16, vitalsY + 62, vitalsWidth - 32, 10, healthRatio, { fill: "#ff7d7d" });
+
+  let vitalsLineY = vitalsY + 88;
+
+  if (shieldActive) {
+    context.fillStyle = "#cbeaff";
+    context.fillText(`Shield ${Math.round(shieldStrength)} / ${Math.round(shieldMax)}`, vitalsX + 16, vitalsLineY);
+    drawUiProgressBar(vitalsX + 16, vitalsLineY + 6, vitalsWidth - 32, 10, shieldRatio, { fill: "#7cd6ff" });
+    vitalsLineY += 32;
+  }
+
+  context.fillStyle = "#9aa6bf";
+  context.fillText(`Materials ${materials}`, vitalsX + 16, vitalsLineY);
+  vitalsLineY += 22;
+
+  const throwable = weaponSlots.find((slot) => slot.category === "throwable");
+  const gadgetSlot = weaponSlots.find((slot) => slot.category === "gadget");
+  const throwCooldown = Math.max(0, stickman.throwCooldown ?? 0);
+  const gadgetCooldown = Math.max(0, gadgetStatus?.gadgetCooldown ?? 0);
+  const throwCooldownMax = Math.max(throwable?.throwable?.cooldownSeconds ?? 0, throwCooldown);
+  const gadgetCooldownMax = Math.max(gadgetSlot?.gadget?.cooldownSeconds ?? 0, gadgetCooldown);
+
+  const statusTags = [];
+
+  if (stickman.comboWindowOpen) {
+    statusTags.push({ text: "Combo window open", background: "rgba(255, 205, 135, 0.32)", color: "#ffe0b8" });
+  }
+  if (throwable) {
+    if (throwCooldown > 0.05) {
+      statusTags.push({ text: `Throw ${formatSeconds(throwCooldown)}`, background: "rgba(255, 173, 102, 0.32)", color: "#ffd7a8" });
+    } else {
+      statusTags.push({ text: "Throw ready", background: "rgba(140, 255, 212, 0.28)", color: "#d6ffee" });
+    }
+  }
+  if (gadgetSlot) {
+    if (gadgetCooldown > 0.05) {
+      statusTags.push({ text: `Gadget ${formatSeconds(gadgetCooldown)}`, background: "rgba(124, 214, 255, 0.28)", color: "#d6f1ff" });
+    } else {
+      statusTags.push({ text: "Gadget ready", background: "rgba(124, 214, 255, 0.2)", color: "#d6f1ff" });
+    }
+  }
+  if ((stickman.stunTimer ?? 0) > 0) {
+    statusTags.push({ text: `Stunned ${formatSeconds(stickman.stunTimer)}`, background: "rgba(255, 140, 122, 0.32)", color: "#ffe0d6" });
+  }
+  if ((stickman.flashBlindTimer ?? 0) > 0) {
+    statusTags.push({ text: `Blinded ${formatSeconds(stickman.flashBlindTimer)}`, background: "rgba(255, 230, 128, 0.32)", color: "#fff2c4" });
+  }
+  if ((stickman.smokeSlowTimer ?? 0) > 0) {
+    statusTags.push({ text: `Smoke slow ${formatSeconds(stickman.smokeSlowTimer)}`, background: "rgba(168, 186, 208, 0.32)", color: "#e1e7f1" });
+  }
+  if (stickman.health <= 0) {
+    statusTags.push({ text: "Downed", background: "rgba(255, 125, 109, 0.36)", color: "#ffe1d6" });
+  }
+
+  if (statusTags.length > 0) {
+    let tagX = vitalsX + 16;
+    let tagY = vitalsLineY;
+    for (const tag of statusTags) {
+      const width = drawUiTag(tag.text, tagX, tagY, tag);
+      tagX += width + 8;
+      if (tagX + width > vitalsX + vitalsWidth - 16) {
+        tagX = vitalsX + 16;
+        tagY += 24;
+      }
+    }
+    vitalsLineY = tagY + 28;
+  }
+
+  const weaponPanelWidth = 320;
+  const weaponPanelHeight = 212;
+  const weaponPanelX = canvasWidth - weaponPanelWidth - 24;
+  const weaponPanelY = 24;
+  drawUiPanel(weaponPanelX, weaponPanelY, weaponPanelWidth, weaponPanelHeight, { accent: getCategoryAccent(currentWeapon?.category ?? "") });
+
+  context.font = UI_TITLE_FONT;
+  context.fillStyle = "#f4f7ff";
+  context.fillText("Weapon", weaponPanelX + 16, weaponPanelY + 30);
+
+  context.font = UI_TEXT_FONT;
+  context.fillStyle = "#d7dff1";
+  context.fillText(currentWeapon?.name ?? "Unarmed", weaponPanelX + 16, weaponPanelY + 56);
+
+  if (currentWeapon?.category) {
+    context.font = UI_SMALL_FONT;
+    context.fillStyle = "#9aa6bf";
+    context.fillText(currentWeapon.category.replace(/-/g, " ").toUpperCase(), weaponPanelX + 16, weaponPanelY + 74);
+  }
+
+  let weaponLineY = weaponPanelY + 100;
+
   if (ammoStatus) {
     const isInfinite = ammoStatus.capacity === Number.POSITIVE_INFINITY;
     const magazineDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.magazine)}`;
     const reserveDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.reserve)}`;
-    let ammoLabel = `Ammo: ${magazineDisplay}/${reserveDisplay}`;
-    if (ammoStatus.reloading) {
-      ammoLabel += ` (Reloading ${Math.max(0, ammoStatus.reloadTimer).toFixed(1)}s)`;
+    context.font = UI_TEXT_FONT;
+    context.fillStyle = "#d7dff1";
+    context.fillText(`Magazine ${magazineDisplay}   Reserve ${reserveDisplay}`, weaponPanelX + 16, weaponLineY);
+    weaponLineY += 18;
+    if (!isInfinite && ammoStatus.capacity > 0) {
+      drawUiProgressBar(weaponPanelX + 16, weaponLineY, weaponPanelWidth - 32, 8, clamp(ammoStatus.magazine / ammoStatus.capacity, 0, 1), { fill: "#ffd27f" });
+      weaponLineY += 20;
     }
-    context.fillText(ammoLabel, weaponHudX, weaponHudY);
-    weaponHudY += 18;
-  }
-  const gadgetStatus = getGadgetStatus();
-  if (gadgetStatus) {
-    context.fillStyle = gadgetStatus.ready ? "#8cffd4" : "#d0d4de";
-    const gadgetLabel = gadgetStatus.label ?? gadgetStatus.id ?? "Gadget";
-    const cooldownLabel = gadgetStatus.cooldown > 0 ? ` (${gadgetStatus.cooldown.toFixed(1)}s)` : "";
-    context.fillText(`${gadgetLabel}${cooldownLabel}`, weaponHudX, weaponHudY);
-    weaponHudY += 18;
-  }
-  context.restore();
-
-  const comboText = stickman.attacking && stickman.currentAttack ? `Combo: ${stickman.currentAttack.name}` : "Combo: Ready";
-
-  let hudY = 84;
-  const survivalHud = getSurvivalHudStatus();
-  if (survivalHud && survivalHud.active) {
-    const stage = survivalHud.stage ?? "wave";
-    const waveNumber = Math.max(1, stage === "countdown" ? survivalHud.wave + 1 : survivalHud.wave || 1);
-    context.fillStyle = "#ffd66c";
-    context.fillText(`Survival Wave ${waveNumber}`, 24, hudY);
-    hudY += 18;
-    context.fillStyle = "#d0d4de";
-    if (stage === "countdown") {
-      context.fillText(`Next wave in ${survivalHud.timer.toFixed(1)}s`, 24, hudY);
-      hudY += 18;
-    } else if (stage === "wave") {
-      context.fillText(`Enemies remaining: ${survivalHud.enemiesAlive}`, 24, hudY);
-      hudY += 18;
-    } else if (stage === "rest") {
-      context.fillText(`Resupply time: ${survivalHud.timer.toFixed(1)}s`, 24, hudY);
-      hudY += 18;
-    }
-    if ((survivalHud.lastReward ?? 0) > 0) {
-      context.fillStyle = "#8cffd4";
-      context.fillText(`Last reward: +${survivalHud.lastReward} materials`, 24, hudY);
-      hudY += 18;
-      context.fillStyle = "#d0d4de";
+    if (ammoStatus.reloading && ammoStatus.reloadSeconds > 0) {
+      const reloadProgress = 1 - clamp(ammoStatus.reloadTimer / ammoStatus.reloadSeconds, 0, 1);
+      drawUiProgressBar(weaponPanelX + 16, weaponLineY, weaponPanelWidth - 32, 6, reloadProgress, { fill: "#ffcf7a" });
+      weaponLineY += 16;
+      context.font = UI_SMALL_FONT;
+      context.fillStyle = "#ffcf7a";
+      context.fillText(`Reloading ${formatSeconds(ammoStatus.reloadTimer)}`, weaponPanelX + 16, weaponLineY + 4);
+      weaponLineY += 18;
     }
   } else {
-    context.fillStyle = "#9aa2b1";
-    context.fillText("Survival Mode: Press Y to begin waves", 24, hudY);
-    hudY += 18;
-    context.fillStyle = "#d0d4de";
+    context.font = UI_TEXT_FONT;
+    context.fillStyle = "#9aa6bf";
+    context.fillText("No ammunition required", weaponPanelX + 16, weaponLineY);
+    weaponLineY += 18;
   }
-  context.fillText(comboText, 24, hudY);
-  hudY += 20;
-  let infoY = hudY;
-  const buildingHud = getBuildingHudStatus();
-  if (buildingHud) {
-    if (buildingHud.active) {
-      context.fillStyle = buildingHud.valid ? "#8cffd4" : "#ff9c9c";
-      context.fillText(`Building: ${buildingHud.blueprintName} (Cost ${buildingHud.cost || 0})`, 24, infoY);
-      infoY += 18;
-      context.fillStyle = "#d0d4de";
-      context.fillText(`Materials: ${buildingHud.resources}`, 24, infoY);
-      infoY += 20;
-    } else {
-      context.fillStyle = "#9aa2b1";
-      context.fillText(`Materials: ${buildingHud.resources}   (Press B to build)`, 24, infoY);
-      infoY += 20;
-    }
-    context.fillStyle = "#d0d4de";
-  }
-  const playerVehicle = getPlayerVehicle();
-  if (playerVehicle) {
-    const vehicleDefinition = VEHICLE_DEFINITIONS[playerVehicle.type];
-    const vehicleLabel = vehicleDefinition?.label ?? playerVehicle.type;
-    const movementType = vehicleDefinition?.movementType ?? "ground";
-    context.fillStyle = "#8cffd4";
-    context.fillText(`Vehicle: ${vehicleLabel} (E to exit)`, 24, infoY);
-    infoY += 20;
-    context.fillStyle = "#9aa2b1";
-    if (movementType === "air") {
-      context.fillText("Controls: A/D strafe   Space rise   S descend", 24, infoY);
-    } else if (movementType === "water") {
-      context.fillText("Controls: A/D throttle   S brake/reverse", 24, infoY);
-    } else {
-      context.fillText("Controls: A/D drive   S brake", 24, infoY);
-    }
-    infoY += 20;
-    const mountedWeapons = vehicleDefinition?.mountedWeapons ?? [];
-    if (mountedWeapons.length > 0) {
-      for (const mount of mountedWeapons) {
-        const bindingLabel = (mount.binding ?? "primary").toLowerCase() === "secondary" ? "Secondary" : "Primary";
-        const mountLabel = mount.label ?? mount.id ?? "Mounted Weapon";
-        context.fillStyle = bindingLabel === "Primary" ? "#cfe3ff" : "#ffd3a3";
-        context.fillText(`${bindingLabel}: ${mountLabel}`, 24, infoY);
-        infoY += 18;
-      }
-    }
-  } else if (stickman.vehicleCandidateId) {
-    const candidate = getVehicleById(stickman.vehicleCandidateId);
-    if (candidate) {
-      const candidateDefinition = VEHICLE_DEFINITIONS[candidate.type];
-      const candidateLabel = candidateDefinition?.label ?? candidate.type;
-      const movementType = candidateDefinition?.movementType ?? "ground";
-      context.fillStyle = "#ffc66d";
-      context.fillText(`Nearby: ${candidateLabel} [E to enter]`, 24, infoY);
-      infoY += 20;
-      context.fillStyle = "#9aa2b1";
-      if (movementType === "air") {
-        context.fillText("Tip: Space rises, S descends when piloting", 24, infoY);
-        infoY += 20;
-      } else if (movementType === "water") {
-        context.fillText("Tip: Boats use A/D throttle, S to brake/reverse", 24, infoY);
-        infoY += 20;
-      } else {
-        context.fillText("Tip: Hold S to brake while driving", 24, infoY);
-        infoY += 20;
-      }
-      const candidateWeapons = candidateDefinition?.mountedWeapons ?? [];
-      if (candidateWeapons.length > 0) {
-        context.fillStyle = "#d6e2ff";
-        for (const mount of candidateWeapons) {
-          const bindingLabel = (mount.binding ?? "primary").toLowerCase() === "secondary" ? "Secondary" : "Primary";
-          const mountLabel = mount.label ?? mount.id ?? "Mounted Weapon";
-          context.fillText(`${bindingLabel}: ${mountLabel}`, 24, infoY);
-          infoY += 18;
-        }
-      }
-    }
-  }
-  context.fillStyle = "#d0d4de";
 
-  const supplyStatus = getSupplyDropStatus();
-  if (supplyStatus) {
-    if (supplyStatus.incomingMessage) {
-      const alpha = clamp(0.35 + 0.65 * (supplyStatus.incomingAlpha ?? 0), 0, 1);
-      context.fillStyle = `rgba(176, 210, 255, ${alpha})`;
-      context.fillText(supplyStatus.incomingMessage, 24, infoY);
-      infoY += 20;
-      context.fillStyle = "#d0d4de";
-    }
-    if ((supplyStatus.timeUntilNext ?? 0) > 0.2 && supplyStatus.nextDropLabel) {
-      const eta = supplyStatus.timeUntilNext;
-      context.fillText(`Next Drop (${supplyStatus.nextDropLabel}): ${eta.toFixed(1)}s`, 24, infoY);
-      infoY += 20;
-    }
-    if ((supplyStatus.activeCount ?? 0) > 0) {
-      context.fillStyle = "#8cffd4";
-      context.fillText(`Drops on field: ${supplyStatus.activeCount}`, 24, infoY);
-      infoY += 20;
-      context.fillStyle = "#d0d4de";
-    }
-    if (supplyStatus.rewardMessage) {
-      const rewardAlpha = clamp(0.3 + 0.7 * (supplyStatus.rewardAlpha ?? 0), 0, 1);
-      context.fillStyle = `rgba(140, 255, 212, ${rewardAlpha})`;
-      context.fillText(`Reward: ${supplyStatus.rewardMessage}`, 24, infoY);
-      infoY += 20;
-      context.fillStyle = "#d0d4de";
+  if (throwable) {
+    const ready = throwCooldown <= 0.05;
+    context.font = UI_SMALL_FONT;
+    context.fillStyle = ready ? "#8cffd4" : "#ffcf7a";
+    context.fillText(`Throw ${ready ? "ready" : formatSeconds(throwCooldown)}`, weaponPanelX + 16, weaponLineY);
+    weaponLineY += 14;
+    if (throwCooldownMax > 0) {
+      const throwProgress = ready ? 1 : 1 - clamp(throwCooldown / throwCooldownMax, 0, 1);
+      drawUiProgressBar(weaponPanelX + 16, weaponLineY, weaponPanelWidth - 32, 6, throwProgress, { fill: "#ffd27f" });
+      weaponLineY += 16;
     }
   }
 
-  const squadStatus = getSquadStatus();
-  if (squadStatus?.command) {
-    context.fillStyle = "#cfe3ff";
-    context.fillText(`Squad: ${squadStatus.command.label}`, 24, infoY);
-    infoY += 18;
-    context.fillStyle = "#9aa2b1";
-    context.fillText("Commands: Z Hold   X Defend   C Attack   V Flank   T Cycle", 24, infoY);
-    infoY += 18;
-    if ((squadStatus.cooldown ?? 0) > 0.05) {
-      context.fillText(`Command cooldown: ${squadStatus.cooldown.toFixed(1)}s`, 24, infoY);
-      infoY += 18;
+  if (gadgetSlot) {
+    const ready = gadgetCooldown <= 0.05;
+    context.font = UI_SMALL_FONT;
+    context.fillStyle = ready ? "#8cffd4" : "#7cd6ff";
+    context.fillText(`Gadget ${ready ? "ready" : formatSeconds(gadgetCooldown)}`, weaponPanelX + 16, weaponLineY);
+    weaponLineY += 14;
+    if (gadgetCooldownMax > 0) {
+      const gadgetProgress = ready ? 1 : 1 - clamp(gadgetCooldown / gadgetCooldownMax, 0, 1);
+      drawUiProgressBar(weaponPanelX + 16, weaponLineY, weaponPanelWidth - 32, 6, gadgetProgress, { fill: "#7cd6ff" });
+      weaponLineY += 16;
     }
-    if (Array.isArray(squadStatus.members) && squadStatus.members.length > 0) {
-      context.fillStyle = "#8cffd4";
-      const maxShown = Math.min(3, squadStatus.members.length);
-      for (let i = 0; i < maxShown; i += 1) {
-        const member = squadStatus.members[i];
-        const distance = Math.abs(member.x - stickman.x);
-        const status = member.targetEnemyId ? "engaging" : "ready";
-        context.fillText(`${member.name ?? "Ally"}: ${distance.toFixed(0)}u (${status})`, 24, infoY);
-        infoY += 18;
-      }
-      context.fillStyle = "#d0d4de";
-    }
-  }
-
-  const p2pStatus = getP2PStatus?.();
-  if (p2pStatus) {
-    context.fillStyle = "#b6c9ff";
-    context.fillText(`P2P: ${p2pStatus.status ?? "unknown"}`, 24, infoY);
-    infoY += 18;
-    if (p2pStatus.status !== "connected") {
-      context.fillStyle = "#8495c9";
-      context.fillText("Use window.P2P.createOffer() / createAnswer() in console", 24, infoY);
-      infoY += 18;
-      context.fillText("window.P2P.getLocalDescription() to copy SDP", 24, infoY);
-      infoY += 18;
-    } else {
-      context.fillStyle = "#8cffd4";
-      context.fillText("Remote peers: " + getRemotePlayers().length, 24, infoY);
-      infoY += 18;
-    }
-    context.fillStyle = "#d0d4de";
-  }
-
-  if (ammoStatus) {
-
-
-    const isInfinite = ammoStatus.capacity === Number.POSITIVE_INFINITY;
-    const magazineDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.magazine)}`;
-    const reserveDisplay = isInfinite ? "INF" : `${Math.max(0, ammoStatus.reserve)}`;
-    let ammoLabel = `Ammo: ${magazineDisplay}/${reserveDisplay}`;
-    if (ammoStatus.reloading) {
-      ammoLabel += ` (Reloading ${Math.max(0, ammoStatus.reloadTimer).toFixed(1)}s)`;
-    }
-    context.fillText(ammoLabel, 24, infoY);
-    infoY += 20;
   }
 
   const recoilMagnitude = Math.hypot(recoilOffset?.horizontal ?? 0, recoilOffset?.vertical ?? 0);
   if (recoilMagnitude > 0.05) {
-    const recoilLabel = `Recoil Kick: H ${(recoilOffset.horizontal ?? 0).toFixed(2)}  V ${(recoilOffset.vertical ?? 0).toFixed(2)}`;
-    context.fillText(recoilLabel, 24, infoY);
-    infoY += 20;
+    context.font = UI_SMALL_FONT;
+    context.fillStyle = "#9aa6bf";
+    context.fillText(`Recoil offset H ${(recoilOffset.horizontal ?? 0).toFixed(2)}  V ${(recoilOffset.vertical ?? 0).toFixed(2)}`, weaponPanelX + 16, weaponLineY);
+    weaponLineY += 18;
   }
 
-  context.fillText(`Player HP: ${stickman.health}/${stickman.maxHealth}`, 24, infoY);
-  infoY += 20;
-  context.fillText(`Dummy HP: ${Math.round(trainingDummy.health)}/${trainingDummy.maxHealth}`, 24, infoY);
-  infoY += 20;
-  const aliveEnemies = enemies.filter((enemy) => enemy.health > 0).length;
-  context.fillText(`Enemies Alive: ${aliveEnemies}`, 24, infoY);
-  infoY += 20;
-
-  if (weaponSlots.length > 0) {
-    const slotLabel = weaponSlots
-      .map((weapon, index) => {
-        const label = `${index + 1}: ${weapon.name}`;
-        return weapon.id === currentWeapon?.id ? `[${label}]` : label;
-      })
-      .join("   ");
-    context.fillStyle = "#9aa2b1";
-    context.fillText(`Loadout ${slotLabel}`, 24, 152);
+  const weaponBadges = [];
+  if ((gadgetStatus?.turretCount ?? 0) > 0) {
+    weaponBadges.push({ text: `Turrets ${gadgetStatus.turretCount}`, background: "rgba(140, 255, 212, 0.25)", color: "#d6ffee" });
+  }
+  if (gadgetStatus?.grappleActive) {
+    weaponBadges.push({ text: "Grapple active", background: "rgba(124, 214, 255, 0.25)", color: "#d6f1ff" });
+  }
+  if (weaponBadges.length > 0) {
+    let badgeX = weaponPanelX + 16;
+    const badgeY = weaponPanelY + weaponPanelHeight - 28;
+    for (const badge of weaponBadges) {
+      const width = drawUiTag(badge.text, badgeX, badgeY, badge);
+      badgeX += width + 8;
+    }
   }
 
-  let nextHudY = 172;
-  if (stickman.comboWindowOpen) {
-    context.fillStyle = "#ffcf7a";
-    context.fillText("Press attack now to chain!", 24, nextHudY);
-    nextHudY += 20;
+  const helpLines = [
+    "Move: WASD / Arrows   Jump: Space   Roll: Shift",
+    "Attack: Left Click or J   Throw: Right Click or G",
+    "Build Mode: B toggle   , / . cycle blueprints",
+    "Toggle Modes: Y Survival   K Sandbox   F9 Co-Op"
+  ];
+  const helpHeight = 32 + helpLines.length * 18;
+  drawUiPanel(24, 24, 360, helpHeight, { accent: "rgba(146, 166, 210, 0.35)" });
+  context.font = UI_TITLE_FONT;
+  context.fillStyle = "#f4f7ff";
+  context.fillText("Core Controls", 40, 48);
+  context.font = UI_TEXT_FONT;
+  context.fillStyle = "#d7dff1";
+  let helpY = 70;
+  for (const line of helpLines) {
+    context.fillText(line, 40, helpY);
+    helpY += 18;
   }
 
-  if (currentWeapon?.category === "throwable") {
-    const ready = stickman.throwCooldown <= 0;
-    const cooldownLabel = ready ? "Ready" : `${stickman.throwCooldown.toFixed(1)}s`;
-    context.fillStyle = ready ? "#8cffd4" : "#ffcf7a";
-    context.fillText(`Grenade: ${cooldownLabel}`, 24, nextHudY);
-    nextHudY += 20;
+  const cards = [];
+  const campaignHud = getCampaignHudStatus();
+  if (campaignHud) {
+    if (campaignHud.stage && campaignHud.stage !== "inactive") {
+      const lines = [];
+      const missionName = campaignHud.missionName ?? "Story Mission";
+      const totalMissions = Math.max(0, campaignHud.totalMissions ?? 0);
+      const missionIndex = campaignHud.missionIndex ?? -1;
+      let missionLabel = missionName;
+      if (totalMissions > 0 && missionIndex >= 0) {
+        missionLabel += ` (${missionIndex + 1}/${totalMissions})`;
+      }
+      lines.push({ text: missionLabel, color: "#fce6b3" });
+      const objective = campaignHud.objective ?? {};
+      if (objective.type === "eliminate" && objective.target > 0) {
+        const progress = Math.min(objective.target, Math.round(objective.progress ?? 0));
+        lines.push(`${objective.label ?? "Eliminate"}: ${progress}/${objective.target}`);
+      } else if (objective.type === "survive" && (objective.remaining ?? 0) > 0) {
+        lines.push(`${objective.label ?? "Hold out"}: ${formatSeconds(objective.remaining)}`);
+      } else if (objective.label) {
+        lines.push(objective.label);
+      }
+      if (campaignHud.message) {
+        lines.push({ text: campaignHud.message, color: "#d7dff1" });
+      }
+      cards.push({ title: "Campaign", accent: "#ffd66c", lines, footer: "Press Q for briefing" });
+    } else {
+      cards.push({ title: "Campaign", accent: "rgba(255, 214, 108, 0.22)", lines: ["Press Q to begin missions."] });
+    }
   }
 
-  if (currentWeapon?.category === "gadget") {
-    const ready = (gadgetStatus.gadgetCooldown ?? 0) <= 0.01;
-    const label = ready ? "Ready" : `${gadgetStatus.gadgetCooldown.toFixed(1)}s`;
-    context.fillStyle = ready ? "#8cffd4" : "#ffcf7a";
-    context.fillText(`Gadget: ${label}`, 24, nextHudY);
-    nextHudY += 20;
+  const survivalHud = getSurvivalHudStatus();
+  if (survivalHud) {
+    const lines = [];
+    const active = Boolean(survivalHud.active);
+    const waveValue = Math.max(1, survivalHud.wave || survivalHud.bestWave || 1);
+    lines.push(active ? `Wave ${Math.max(1, survivalHud.wave || 1)}` : `Best Wave ${Math.max(1, survivalHud.bestWave || waveValue)}`);
+    if (active) {
+      if (survivalHud.stage === "rest") {
+        lines.push(`Resupply ${formatSeconds(survivalHud.timer ?? 0)}`);
+      } else if (survivalHud.stage === "countdown") {
+        lines.push(`Deploying ${formatSeconds(survivalHud.timer ?? 0)}`);
+      } else {
+        lines.push(`Enemies ${survivalHud.enemiesAlive}`);
+      }
+      lines.push(`Kills ${survivalHud.kills ?? 0}`);
+    } else if (survivalHud.lastOutcome === "defeat") {
+      lines.push("Defeated last run");
+      lines.push(`Kills ${survivalHud.kills ?? 0} | Materials ${survivalHud.runReward ?? 0}`);
+    } else {
+      lines.push("Press Y to launch waves.");
+      if ((survivalHud.bestKills ?? 0) > 0) {
+        lines.push(`Best kills ${survivalHud.bestKills}`);
+      }
+    }
+    cards.push({
+      title: "Survival",
+      accent: active ? "#ffd66c" : "rgba(255, 214, 108, 0.18)",
+      lines,
+      footer: active ? "Press Y to exit Survival" : "Press Y to begin Survival"
+    });
   }
 
-  if ((gadgetStatus.turretCount ?? 0) > 0) {
-    context.fillStyle = "#9ae9ff";
-    context.fillText(`Turrets Active: ${gadgetStatus.turretCount}`, 24, nextHudY);
-    nextHudY += 20;
+  const sandboxHud = getSandboxHudStatus();
+  if (sandboxHud) {
+    const lines = [];
+    const active = Boolean(sandboxHud.active);
+    if (active) {
+      lines.push(`Wave ${Math.max(1, sandboxHud.wave || 1)}`);
+      if (sandboxHud.inRest && (sandboxHud.restTimer ?? 0) > 0) {
+        lines.push(`Next wave ${formatSeconds(sandboxHud.restTimer ?? 0)}`);
+      } else {
+        lines.push(`Enemies ${sandboxHud.enemiesAlive}`);
+      }
+      lines.push(`Kills ${sandboxHud.kills ?? 0}`);
+    } else {
+      lines.push("Press K to start full-arsenal skirmish.");
+      if ((sandboxHud.bestWave ?? 0) > 0 || (sandboxHud.bestKills ?? 0) > 0) {
+        lines.push(`Best Wave ${Math.max(1, sandboxHud.bestWave ?? 0)} | Kills ${sandboxHud.bestKills ?? 0}`);
+      }
+    }
+    cards.push({
+      title: "Sandbox",
+      accent: active ? "#8cffd4" : "rgba(140, 255, 212, 0.2)",
+      lines,
+      footer: active ? "Press K to exit Sandbox Skirmish" : "Press K to toggle Sandbox"
+    });
   }
 
-  if (gadgetStatus.shieldActive) {
-    const maxShield = gadgetStatus.shieldMaxStrength ?? 0;
-    const shieldValue = Math.max(0, gadgetStatus.shieldStrength ?? 0);
-    const ratio = maxShield > 0 ? Math.max(0, Math.min(1, shieldValue / maxShield)) : 0;
-    context.fillStyle = "#7cd6ff";
-    const label = maxShield > 0 ? `${Math.ceil(shieldValue)}/${Math.ceil(maxShield)}` : "Active";
-    context.fillText(`Shield: ${label}`, 24, nextHudY);
-    nextHudY += 14;
-    const barWidth = 120;
-    context.fillStyle = "#2d3c4d";
-    context.fillRect(24, nextHudY, barWidth, 6);
-    context.fillStyle = "#7cd6ff";
-    context.fillRect(24, nextHudY, barWidth * ratio, 6);
-    nextHudY += 14;
+  const coopHud = getCoopHudStatus();
+  if (coopHud) {
+    const lines = [];
+    const active = Boolean(coopHud.active);
+    if (active) {
+      const participants = Math.max(0, coopHud.participants || 1);
+      const maxParticipants = Math.max(participants, coopHud.maxParticipants || participants);
+      lines.push(`${participants}/${maxParticipants} connected`);
+      lines.push(`Latency ${Math.max(0, coopHud.averageLatency ?? 0).toFixed(0)} ms`);
+      lines.push(`Throughput ${Math.max(0, coopHud.packetsPerSecond ?? 0).toFixed(1)} pkt/s`);
+    } else {
+      lines.push("Press F9 to open Massive Co-Op.");
+      if (coopHud.lastOutcome && coopHud.lastOutcome !== "inactive") {
+        lines.push(`Last session: ${coopHud.lastOutcome}`);
+      }
+    }
+    cards.push({
+      title: "Massive Co-Op",
+      accent: active ? "#8cffd4" : "rgba(140, 255, 212, 0.18)",
+      lines,
+      footer: active ? "Press F9 to disconnect" : "Press F9 to connect"
+    });
   }
 
-  if ((stickman.stunTimer ?? 0) > 0) {
-    context.fillStyle = "#ffb48a";
-    context.fillText(`Stunned: ${stickman.stunTimer.toFixed(1)}s`, 24, nextHudY);
-    nextHudY += 20;
+  const supplyStatus = getSupplyDropStatus();
+  if (supplyStatus && (supplyStatus.incomingMessage || supplyStatus.rewardMessage || (supplyStatus.activeCount ?? 0) > 0)) {
+    const lines = [];
+    if (supplyStatus.incomingMessage) {
+      lines.push({ text: supplyStatus.incomingMessage, color: "#d6f1ff" });
+    }
+    if ((supplyStatus.timeUntilNext ?? 0) > 0.2 && supplyStatus.nextDropLabel) {
+      lines.push(`Next drop ${supplyStatus.nextDropLabel}: ${formatSeconds(supplyStatus.timeUntilNext ?? 0)}`);
+    }
+    if ((supplyStatus.activeCount ?? 0) > 0) {
+      lines.push(`Drops on field ${supplyStatus.activeCount}`);
+    }
+    if (supplyStatus.rewardMessage) {
+      lines.push({ text: `Reward ${supplyStatus.rewardMessage}`, color: "#8cffd4" });
+    }
+    cards.push({ title: "Supply Drops", accent: "#8cffd4", lines });
   }
 
-  if ((stickman.flashBlindTimer ?? 0) > 0) {
-    context.fillStyle = "#ffe27a";
-    context.fillText(`Blinded: ${stickman.flashBlindTimer.toFixed(1)}s`, 24, nextHudY);
-    nextHudY += 20;
+  const p2pStatus = getP2PStatus?.();
+  if (p2pStatus && p2pStatus.status && p2pStatus.status !== "inactive") {
+    const lines = [];
+    lines.push(`Status: ${p2pStatus.status}`);
+    if (p2pStatus.status !== "connected") {
+      lines.push("Use window.P2P.createOffer() in console");
+    } else {
+      lines.push(`Remote peers ${getRemotePlayers().length}`);
+    }
+    cards.push({ title: "P2P Session", accent: "rgba(146, 166, 210, 0.35)", lines });
   }
 
-  if ((stickman.smokeSlowTimer ?? 0) > 0) {
-    context.fillStyle = "#b8c7dd";
-    context.fillText(`In Smoke: ${stickman.smokeSlowTimer.toFixed(1)}s`, 24, nextHudY);
-    nextHudY += 20;
+  const cardsStartY = weaponPanelY + weaponPanelHeight + 16;
+  const cardsBottom = drawUiCardStack(cards, weaponPanelX, cardsStartY, weaponPanelWidth);
+
+  drawWeaponHotbar(weaponSlots, currentWeapon, ammoStatus, canvasWidth, canvasHeight);
+
+  const perfMetrics = [
+    ["En", "enemies"],
+    ["Sq", "squad"],
+    ["Veh", "vehicle"],
+    ["Net", "remote"],
+    ["Dst", "destructible"],
+    ["Bld", "building"],
+    ["Int", "interactable"],
+    ["Res", "resource"]
+  ];
+  const performanceEntries = [];
+  for (const [label, key] of perfMetrics) {
+    const totalKey = `${key}Total`;
+    const culledKey = `${key}Culled`;
+    const total = performanceStats[totalKey] ?? 0;
+    if (total <= 0) {
+      continue;
+    }
+    const visible = Math.max(0, total - (performanceStats[culledKey] ?? 0));
+    performanceEntries.push(`${label} ${visible}/${total}`);
   }
 
-  if (stickman.health <= 0) {
-    context.fillStyle = "#ff8c7a";
-    context.fillText("Respawning soon...", 24, nextHudY);
+  let perfPanelTop = canvasHeight - 24;
+  if (performanceEntries.length > 0) {
+    context.font = UI_SMALL_FONT;
+    const perfText = performanceEntries.join("   ");
+    const perfWidth = Math.max(200, Math.ceil(context.measureText(perfText).width) + 32);
+    const perfHeight = 48;
+    const perfX = canvasWidth - perfWidth - 24;
+    const perfY = canvasHeight - perfHeight - 24;
+    drawUiPanel(perfX, perfY, perfWidth, perfHeight, { accent: "rgba(146, 166, 210, 0.35)", radius: 10 });
+    context.save();
+    context.font = UI_SMALL_FONT;
+    context.fillStyle = "#9aa6bf";
+    context.fillText("Performance", perfX + 16, perfY + 20);
+    context.fillStyle = "#d0d7e9";
+    context.fillText(perfText, perfX + 16, perfY + perfHeight - 12);
+    context.restore();
+    perfPanelTop = perfY;
   }
 
   const debugState = getPolishDebugState();
-  const activeNotices = debugState.notices.slice(-4).reverse();
-  if (activeNotices.length > 0 || debugState.shotIndicators.length > 0 || debugState.filters) {
+  const notices = debugState?.notices?.slice(-4).reverse() ?? [];
+  const shotIndicators = debugState?.shotIndicators ?? [];
+  const debugLines = [];
+  for (const notice of notices) {
+    const life = notice.maxTtl > 0 ? clamp(notice.ttl / notice.maxTtl, 0, 1) : 1;
+    debugLines.push({ text: notice.message, alpha: life });
+  }
+  for (const indicator of shotIndicators) {
+    const life = indicator.maxTtl > 0 ? clamp(indicator.ttl / indicator.maxTtl, 0, 1) : 1;
+    debugLines.push({ text: `Shot: ${indicator.weaponId}`, alpha: life });
+  }
+  const activeFilters = Object.entries(debugState?.filters ?? {}).filter(([, value]) => value);
+  if (activeFilters.length > 0) {
+    debugLines.push({ text: `Filters ${activeFilters.map(([key]) => key).join(', ')}`, alpha: 0.85, color: "#9aa6bf" });
+  }
+  if (debugLines.length > 0) {
+    const debugHeight = 32 + debugLines.length * 18;
+    let debugY = cardsBottom + 12;
+    const maxDebugY = perfPanelTop - debugHeight - 12;
+    if (debugY > maxDebugY) {
+      debugY = maxDebugY;
+    }
+    drawUiPanel(weaponPanelX, debugY, weaponPanelWidth, debugHeight, { accent: "rgba(146, 166, 210, 0.25)", radius: 10, fill: "rgba(10, 16, 26, 0.82)" });
     context.save();
-    const rightMargin = context.canvas.width - 24;
-    context.textAlign = "right";
-    let debugY = 32;
-    for (const notice of activeNotices) {
-      const life = notice.maxTtl > 0 ? clamp(notice.ttl / notice.maxTtl, 0, 1) : 0;
-      context.globalAlpha = clamp(life, 0.25, 1);
-      context.fillStyle = "#c3cdea";
-      context.fillText(notice.message, rightMargin, debugY);
-      debugY += 18;
+    context.font = UI_SMALL_FONT;
+    context.fillStyle = "#9aa6bf";
+    context.fillText("Debug Feed", weaponPanelX + 16, debugY + 20);
+    let debugLineY = debugY + 38;
+    for (const entry of debugLines) {
+      context.globalAlpha = entry.alpha ?? 1;
+      context.fillStyle = entry.color ?? "#d0d7e9";
+      context.fillText(entry.text, weaponPanelX + 16, debugLineY);
+      debugLineY += 18;
     }
-    if (debugState.shotIndicators.length > 0) {
-      if (activeNotices.length > 0) {
-        debugY += 6;
-      }
-      for (const entry of debugState.shotIndicators) {
-        const life = entry.maxTtl > 0 ? clamp(entry.ttl / entry.maxTtl, 0, 1) : 0;
-        context.globalAlpha = clamp(life, 0.3, 0.85);
-        context.fillStyle = "#9aa2b1";
-        context.fillText("Shot: " + entry.weaponId, rightMargin, debugY);
-        debugY += 16;
-      }
-    }
-    const filters = debugState.filters;
-    if (filters) {
-      if (debugY > 32) {
-        debugY += 6;
-      }
-      context.globalAlpha = 0.6;
-      context.fillStyle = "#7f8aad";
-      context.fillText("Filters (Alt+6/7/8)", rightMargin, debugY);
-      debugY += 16;
-      const filterLines = [
-        { label: "Weapons", value: filters.weapons },
-        { label: "Shield", value: filters.shield },
-        { label: "Throwables", value: filters.throwables }
-      ];
-      for (const line of filterLines) {
-        context.globalAlpha = line.value ? 0.85 : 0.35;
-        context.fillStyle = line.value ? "#c3cdea" : "#6c7389";
-        context.fillText(line.label + ": " + (line.value ? "ON" : "OFF"), rightMargin, debugY);
-        debugY += 16;
-      }
-    }
-    context.globalAlpha = 1;
     context.restore();
   }
+
+  context.restore();
 }
+
 function drawGadgetsLayer() {
   drawGadgets();
 }
@@ -1109,6 +1343,27 @@ function drawServerBrowser() {
   context.restore();
 }
 export { drawBackground, drawDestructibles, drawBuildings, drawInteractables, drawVehicles, drawSupplyDrops, drawRemotePlayers, drawServerBrowser, drawSquadmates, drawStickman, drawHitboxes, drawBuildPreview, drawTrainingDummy, drawEnemies, drawHud, drawProjectilesLayer, drawGadgetsLayer };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

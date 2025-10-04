@@ -1,7 +1,8 @@
-import { SPEED, JUMP_SPEED, ROLL_SPEED, GRAVITY, POSES } from "../../config/constants.js";
+﻿import { SPEED, JUMP_SPEED, ROLL_SPEED, GRAVITY, POSES } from "../../config/constants.js";
 import { canvas, GROUND_Y } from "../../environment/canvas.js";
-import { getEnvironmentWidth } from "../../state/environment.js";
+import { getEnvironmentWidth, setEnvironment } from "../../state/environment.js";
 import { setCameraTargetX, updateCamera } from "../../state/camera.js";
+import { setMaterialCount } from "../../state/resources.js";
 import { input } from "../input/index.js";
 import { stickman, trainingDummy, enemies, getTotalHeight, getRemotePlayers, squadmates } from "../../state/entities.js";
 import { determinePose, startRoll, attemptAttack, advanceAttack } from "../combat/playerActions.js";
@@ -11,6 +12,9 @@ import { deployGadget, updateGadgets, updateGadgetMovement, clearGadgets } from 
 import { updateTrainingDummy } from "./trainingDummy.js";
 import { updateSalvagePickups } from "../resources/index.js";
 import { updateSurvival } from "../survival/index.js";
+import { updateMassiveCoop } from "../coop/index.js";
+import { updateSandboxSkirmish } from "../sandbox/index.js";
+import { updateCampaign } from "../campaign/index.js";
 import { updateBuildingSystem } from "../building/index.js";
 import { updateDamagePopups } from "../effects/damage.js";
 import { updateParticles } from "../effects/particles.js";
@@ -21,7 +25,7 @@ import { updateVehicles, handleVehicleInteraction, getPlayerVehicle, forcePlayer
 import { updateSupplyDrops } from "./supplyDrops.js";
 import { updateDestructibles } from "./destructibles.js";
 import { updateInteractables } from "./interactables.js";
-import { updateEnemySpawner } from "./enemySpawner.js";
+import { updateEnemySpawner, spawnEnemies } from "./enemySpawner.js";
 import { updateServerBrowser, showServerBrowser, hideServerBrowser, selectNext as selectServerBrowser, attemptJoinSession, getServerBrowserState, setHostingMetrics, attemptHostSession, attemptStopHosting, copyHostOffer, promptForHostOffer, promptForJoinerAnswer, copyLocalCandidates, promptForRemoteCandidates } from "../network/serverBrowser.js";
 import { updateP2P } from "../network/p2p.js";
 import { updateSquadmates, cycleSquadCommand, setSquadCommandById } from "../squad/index.js";
@@ -32,6 +36,10 @@ import { advanceTime } from "../utils/time.js";
 import { getCurrentWeapon } from "../combat/weapons.js";
 import { updateRecoil } from "../../state/recoil.js";
 import { updateAmmoTimers, getAmmoStatus, startReload as requestReload } from "../../state/ammo.js";
+import { updateAimSystem } from "../aim/index.js";
+import { updateLoadoutSystem, isLoadoutEditorVisible } from "../loadout/index.js";
+import { updateCosmeticSystem, isCosmeticEditorVisible } from "../cosmetics/index.js";
+import { updateScenarioSystem, isScenarioEditorVisible, consumeScenarioApplication, setScenarioRuntimeApplied } from "../scenario/index.js";
 
 
 function clampPlayerX() {
@@ -39,6 +47,85 @@ function clampPlayerX() {
   const margin = 40;
   const maxX = Math.max(margin, envWidth - margin);
   stickman.x = Math.max(margin, Math.min(maxX, stickman.x));
+}
+
+function clampToArena(value, margin, envWidth) {
+  const width = Math.max(1, envWidth ?? getEnvironmentWidth());
+  return Math.max(margin, Math.min(width - margin, value));
+}
+
+function applyScenarioConfiguration(request) {
+  const scenario = request?.scenario;
+  if (!scenario) {
+    return;
+  }
+
+  setEnvironment(scenario.environmentId);
+  const envWidth = getEnvironmentWidth();
+  const standingHeight = getTotalHeight(POSES.standing);
+  const playerX = clampToArena(envWidth * (scenario.playerSpawnRatio ?? 0.5), 40, envWidth);
+
+  stickman.x = playerX;
+  stickman.y = GROUND_Y - standingHeight;
+  stickman.vx = 0;
+  stickman.vy = 0;
+  stickman.onGround = true;
+  stickman.controlMode = "onFoot";
+  stickman.vehicleId = null;
+  stickman.vehicleCandidateId = null;
+  stickman.rollTimer = 0;
+  stickman.crouching = false;
+  stickman.attacking = false;
+  stickman.attackIndex = -1;
+  stickman.currentAttack = null;
+  stickman.attackElapsed = 0;
+  stickman.comboWindowOpen = false;
+  stickman.comboWindowTimer = 0;
+  stickman.hitboxSpawned = false;
+  stickman.activeHitboxes.length = 0;
+  stickman.throwCooldown = 0;
+  stickman.gadgetCooldown = 0;
+  stickman.reloading = false;
+  stickman.flashBlindTimer = 0;
+  stickman.smokeSlowTimer = 0;
+  stickman.smokeSlowStrength = 1;
+  stickman.health = stickman.maxHealth;
+  stickman.invulnerability = 0;
+
+  const dummyX = clampToArena(envWidth * (scenario.dummySpawnRatio ?? 0.8), 80, envWidth);
+  trainingDummy.x = dummyX;
+  trainingDummy.y = GROUND_Y - trainingDummy.height;
+  trainingDummy.health = trainingDummy.maxHealth;
+  trainingDummy.flashTimer = 0;
+  trainingDummy.shakeTimer = 0;
+  trainingDummy.shakeMagnitude = 0;
+  trainingDummy.respawnTimer = 0;
+
+  squadmates.forEach((ally, index) => {
+    const offset = -140 + index * 90;
+    ally.x = clampToArena(playerX + offset, 60, envWidth);
+    ally.y = GROUND_Y - getTotalHeight(POSES.standing);
+    ally.vx = 0;
+    ally.vy = 0;
+    ally.onGround = true;
+    ally.state = "follow";
+    ally.targetEnemyId = null;
+    ally.fireCooldown = 0;
+  });
+
+  enemies.length = 0;
+
+  const leftSpawn = clampToArena(envWidth * (scenario.enemySpawnRatios?.[0] ?? 0.25), 40, envWidth);
+  const rightSpawn = clampToArena(envWidth * (scenario.enemySpawnRatios?.[1] ?? 0.75), 40, envWidth);
+  const spawnPoints = [leftSpawn, rightSpawn];
+
+  setMaterialCount(Math.max(0, scenario.startingMaterials ?? 0));
+  setScenarioRuntimeApplied({ scenarioId: scenario.id, spawnOverride: { context: "scenario", points: spawnPoints } });
+
+  const count = Math.max(0, Math.round(scenario.enemyCount ?? 0));
+  if (count > 0) {
+    spawnEnemies(count, { context: "scenario", autoRespawn: false });
+  }
 }
 
 function updatePlayerAlive(delta) {
@@ -172,6 +259,9 @@ function updateGame(delta) {
   updateBuildingSystem(delta);
   updateSalvagePickups(delta);
   updateSurvival(delta);
+  updateMassiveCoop(delta);
+  updateSandboxSkirmish(delta);
+  updateCampaign(delta);
   stickman.invulnerability = Math.max(0, stickman.invulnerability - delta);
   stickman.structureShieldTimer = Math.max(0, (stickman.structureShieldTimer ?? 0) - delta);
   if (stickman.structureShieldTimer <= 0) {
@@ -186,20 +276,33 @@ function updateGame(delta) {
     stickman.smokeSlowStrength = 1;
   }
 
-  const interactRequested = input.interactBuffered;
+  updateLoadoutSystem(delta);
+  updateCosmeticSystem(delta);
+  updateScenarioSystem(delta);
+  const loadoutMenuOpen = isLoadoutEditorVisible();
+  const cosmeticMenuOpen = isCosmeticEditorVisible();
+  const scenarioMenuOpen = isScenarioEditorVisible();
+  const overlayMenuOpen = loadoutMenuOpen || cosmeticMenuOpen || scenarioMenuOpen;
+
+  const scenarioRequest = consumeScenarioApplication();
+  if (scenarioRequest) {
+    applyScenarioConfiguration(scenarioRequest);
+  }
+
+  const interactRequested = overlayMenuOpen ? false : input.interactBuffered;
   input.interactBuffered = false;
-  const squadCycleRequested = input.squadCommandCycleBuffered;
-  const squadSelectRequested = input.squadCommandSelect;
-  const serverBrowserToggleRequested = input.serverBrowserToggleBuffered;
-  const serverBrowserNavigate = input.serverBrowserNavigate;
-  const serverBrowserJoinRequested = input.serverBrowserJoinBuffered;
-  const serverBrowserHostRequested = input.serverBrowserHostBuffered;
-  const serverBrowserStopRequested = input.serverBrowserStopHostBuffered;
-  const serverBrowserCopyOfferRequested = input.serverBrowserCopyOfferBuffered;
-  const serverBrowserPasteOfferRequested = input.serverBrowserPasteOfferBuffered;
-  const serverBrowserAcceptAnswerRequested = input.serverBrowserAcceptAnswerBuffered;
-  const serverBrowserCopyCandidatesRequested = input.serverBrowserCopyCandidatesBuffered;
-  const serverBrowserPasteCandidatesRequested = input.serverBrowserPasteCandidatesBuffered;
+  const squadCycleRequested = overlayMenuOpen ? false : input.squadCommandCycleBuffered;
+  const squadSelectRequested = overlayMenuOpen ? null : input.squadCommandSelect;
+  const serverBrowserToggleRequested = overlayMenuOpen ? false : input.serverBrowserToggleBuffered;
+  const serverBrowserNavigate = overlayMenuOpen ? 0 : input.serverBrowserNavigate;
+  const serverBrowserJoinRequested = overlayMenuOpen ? false : input.serverBrowserJoinBuffered;
+  const serverBrowserHostRequested = overlayMenuOpen ? false : input.serverBrowserHostBuffered;
+  const serverBrowserStopRequested = overlayMenuOpen ? false : input.serverBrowserStopHostBuffered;
+  const serverBrowserCopyOfferRequested = overlayMenuOpen ? false : input.serverBrowserCopyOfferBuffered;
+  const serverBrowserPasteOfferRequested = overlayMenuOpen ? false : input.serverBrowserPasteOfferBuffered;
+  const serverBrowserAcceptAnswerRequested = overlayMenuOpen ? false : input.serverBrowserAcceptAnswerBuffered;
+  const serverBrowserCopyCandidatesRequested = overlayMenuOpen ? false : input.serverBrowserCopyCandidatesBuffered;
+  const serverBrowserPasteCandidatesRequested = overlayMenuOpen ? false : input.serverBrowserPasteCandidatesBuffered;
   input.squadCommandCycleBuffered = false;
   input.squadCommandSelect = null;
   input.serverBrowserToggleBuffered = false;
@@ -210,16 +313,18 @@ function updateGame(delta) {
   input.serverBrowserCopyOfferBuffered = false;
   input.serverBrowserPasteOfferBuffered = false;
   input.serverBrowserAcceptAnswerBuffered = false;
+  input.serverBrowserCopyCandidatesBuffered = false;
+  input.serverBrowserPasteCandidatesBuffered = false;
 
-  const rawAttackRequested = stickman.health > 0 ? input.attackBuffered : false;
-  const rawThrowRequested = stickman.health > 0 ? input.throwBuffered : false;
-  const rawReloadRequested = stickman.health > 0 ? input.reloadBuffered : false;
+  const rawAttackRequested = !overlayMenuOpen && stickman.health > 0 ? input.attackBuffered : false;
+  const rawThrowRequested = !overlayMenuOpen && stickman.health > 0 ? input.throwBuffered : false;
+  const rawReloadRequested = !overlayMenuOpen && stickman.health > 0 ? input.reloadBuffered : false;
 
   input.attackBuffered = false;
   input.throwBuffered = false;
   input.reloadBuffered = false;
 
-  const rollAttempted = input.roll;
+  const rollAttempted = overlayMenuOpen ? false : input.roll;
   input.roll = false;
 
   handleVehicleInteraction(interactRequested);
@@ -309,7 +414,7 @@ function updateGame(delta) {
     stickman.controlMode = "onFoot";
   }
 
-  const canAct = !inVehicle && stickman.stunTimer <= 0 && !stickman.reloading;
+  const canAct = !overlayMenuOpen && !inVehicle && stickman.stunTimer <= 0 && !stickman.reloading;
 
   const attackRequested = canAct ? rawAttackRequested : false;
   const throwRequested = canAct ? rawThrowRequested : false;
@@ -361,6 +466,8 @@ function updateGame(delta) {
     stickman.controlMode = "vehicle";
   }
 
+  updateAimSystem(delta);
+
   if (!canAct) {
     stickman.attacking = false;
     stickman.currentAttack = null;
@@ -372,6 +479,8 @@ function updateGame(delta) {
     stickman.attackIndex = -1;
     stickman.activeHitboxes.length = 0;
   }
+
+  stickman.fireCooldown = Math.max(0, (stickman.fireCooldown ?? 0) - delta);
 
   const weapon = getCurrentWeapon();
   const weaponCategory = weapon?.category ?? "";
@@ -395,6 +504,9 @@ function updateGame(delta) {
     stickman.activeHitboxes.length = 0;
     if (weapon) {
       const ammoStatus = getAmmoStatus(weapon.id);
+      const fireInterval = Math.max(weapon.fireInterval ?? 0.26, 0.05);
+      const isAutoFire = weapon.auto === true;
+      const holdFire = isAutoFire && input.attackDown && canAct;
       if (reloadRequested) {
         if (requestReload(weapon.id)) {
           stickman.attacking = false;
@@ -402,8 +514,12 @@ function updateGame(delta) {
           stickman.attackIndex = -1;
         }
       }
-      if (attackRequested) {
-        fireEquippedWeaponProjectile();
+      const shouldAttemptShot = (attackRequested || holdFire) && stickman.fireCooldown <= 0;
+      if (shouldAttemptShot) {
+        const fired = fireEquippedWeaponProjectile();
+        if (fired) {
+          stickman.fireCooldown = fireInterval;
+        }
       }
       if (ammoStatus && ammoStatus.magazine <= 0 && ammoStatus.reserve > 0 && !ammoStatus.reloading) {
         requestReload(weapon.id);
@@ -422,8 +538,17 @@ function updateGame(delta) {
     resolveHitDetection();
   } else {
     stickman.activeHitboxes.length = 0;
-    if (isRangedWeapon && attackRequested) {
-      fireEquippedWeaponProjectile();
+    if (isRangedWeapon) {
+      const fireInterval = Math.max(weapon?.fireInterval ?? 0.26, 0.05);
+      const isAutoFire = weapon?.auto === true;
+      const holdFire = isAutoFire && input.attackDown && canAct;
+      const shouldAttemptShot = (attackRequested || holdFire) && stickman.fireCooldown <= 0;
+      if (shouldAttemptShot) {
+        const fired = fireEquippedWeaponProjectile();
+        if (fired) {
+          stickman.fireCooldown = fireInterval;
+        }
+      }
     }
   }
 
@@ -446,6 +571,11 @@ function updateGame(delta) {
 }
 
 export { updateGame };
+
+
+
+
+
 
 
 

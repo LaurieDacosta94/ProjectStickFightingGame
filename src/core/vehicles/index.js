@@ -423,29 +423,31 @@ function updateAirVehicle(vehicle, definition, delta, isControlled) {
   vehicle.tilt += (targetTilt - vehicle.tilt) * Math.min(1, delta * 6);
 }
 
-function fireMountedWeaponProjectile(vehicle, mountDef, mountState, facingSign) {
-  const followFacing = mountDef.followVehicleFacing !== false;
-  const vehicleFacing = vehicle.facing ?? 1;
-  const appliedFacing = facingSign !== undefined ? facingSign : (mountDef.facing ?? 1) * (followFacing ? vehicleFacing : 1);
-  const offsetX = mountDef.offset?.x ?? 0;
-  const offsetY = mountDef.offset?.y ?? 0;
-  const facingMultiplier = followFacing ? vehicleFacing : 1;
-  const baseX = vehicle.x + offsetX * facingMultiplier;
-  const baseY = vehicle.y + offsetY;
+function fireMountedWeaponProjectile(vehicle, mountDef, mountState) {
+  const aim = mountState.aim ?? null;
+  const baseAngle = aim && Number.isFinite(aim.angle) ? aim.angle : Math.atan2(aim?.vectorY ?? 0, aim?.vectorX ?? (mountDef.facing ?? 1));
+  const cos = Math.cos(baseAngle);
+  const sin = Math.sin(baseAngle);
+  const offset = mountDef.offset ?? { x: 0, y: 0 };
+  const anchorX = Number.isFinite(aim?.anchorX) ? aim.anchorX : vehicle.x + offset.x;
+  const anchorY = Number.isFinite(aim?.anchorY) ? aim.anchorY : vehicle.y + offset.y;
   const muzzles = mountDef.muzzles && mountDef.muzzles.length > 0 ? mountDef.muzzles : [{ x: mountDef.muzzle?.x ?? 0, y: mountDef.muzzle?.y ?? 0 }];
   const muzzleIndex = mountState.muzzleIndex ?? 0;
   const muzzle = muzzles[muzzleIndex % muzzles.length];
   mountState.muzzleIndex = (muzzleIndex + 1) % muzzles.length;
-  const muzzleX = baseX + (muzzle?.x ?? 0) * facingMultiplier;
-  const muzzleY = baseY + (muzzle?.y ?? 0);
+  const localX = muzzle?.x ?? 0;
+  const localY = muzzle?.y ?? 0;
+  const muzzleX = anchorX + localX * cos - localY * sin;
+  const muzzleY = anchorY + localX * sin + localY * cos;
 
   const projectileDef = mountDef.projectile ?? {};
   const speed = projectileDef.speed ?? 600;
   const scatterRadians = (mountDef.scatter ?? 0) * (Math.PI / 180);
-  const spreadAngle = scatterRadians > 0 ? (Math.random() - 0.5) * scatterRadians : 0;
-  const facingSignValue = appliedFacing >= 0 ? 1 : -1;
-  const vx = Math.cos(spreadAngle) * speed * facingSignValue;
-  const vy = Math.sin(spreadAngle) * speed + (projectileDef.verticalSpeed ?? 0);
+  const randomOffset = scatterRadians > 0 ? (Math.random() - 0.5) * scatterRadians : 0;
+  const finalAngle = baseAngle + randomOffset;
+  const vx = Math.cos(finalAngle) * speed;
+  const vy = Math.sin(finalAngle) * speed + (projectileDef.verticalSpeed ?? 0);
+  const facing = vx >= 0 ? 1 : -1;
 
   spawnProjectile({
     x: muzzleX,
@@ -457,7 +459,7 @@ function fireMountedWeaponProjectile(vehicle, mountDef, mountState, facingSign) 
     color: projectileDef.color ?? "#ffd27a",
     damage: projectileDef.damage ?? 12,
     knockback: projectileDef.knockback ?? 80,
-    facing: facingSignValue,
+    facing,
     gravityFactor: projectileDef.gravityFactor ?? 0.12
   });
 
@@ -473,7 +475,6 @@ function updateMountedWeaponsForVehicle(vehicle, definition, delta, isControlled
     return;
   }
 
-  const vehicleFacing = vehicle.facing ?? 1;
   const wantsPrimary = isControlled && input.attackDown;
   const wantsSecondary = isControlled && input.throwDown;
 
@@ -503,9 +504,7 @@ function updateMountedWeaponsForVehicle(vehicle, definition, delta, isControlled
       continue;
     }
 
-    const followFacing = mountDef.followVehicleFacing !== false;
-    const facingSign = (mountDef.facing ?? 1) * (followFacing ? vehicleFacing : 1);
-    fireMountedWeaponProjectile(vehicle, mountDef, mountState, facingSign);
+    fireMountedWeaponProjectile(vehicle, mountDef, mountState);
     mountState.cooldown = mountDef.fireInterval ?? 0.2;
   }
 }

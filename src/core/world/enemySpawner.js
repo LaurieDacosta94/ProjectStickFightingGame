@@ -1,6 +1,7 @@
 import { enemies, createGruntEnemy } from "../../state/entities.js";
 import { ENEMY_SPAWN_SETTINGS } from "../../config/spawn.js";
 import { getEnvironmentWidth, getEnvironmentSpawnSettings } from "../../state/environment.js";
+import { getScenarioSpawnOverride } from "../scenario/index.js";
 
 function resolveSpawnPoints() {
   const envWidth = getEnvironmentWidth();
@@ -17,7 +18,11 @@ function resolveSpawnPoints() {
 function spawnEnemies(count, options = {}) {
   const contextTag = options.context ?? "sandbox";
   const autoRespawn = options.autoRespawn ?? contextTag !== "survival";
-  const spawnPoints = resolveSpawnPoints();
+  const override = getScenarioSpawnOverride();
+  const overridePoints = override && Array.isArray(override.points) && override.points.length >= 2 && (!override.context || override.context === contextTag)
+    ? override.points
+    : null;
+  const spawnPoints = overridePoints ?? resolveSpawnPoints();
   const maxActive = Math.min(spawnPoints.length, ENEMY_SPAWN_SETTINGS.maxCount);
   let spawned = 0;
 

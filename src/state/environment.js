@@ -1,4 +1,4 @@
-﻿import { ENVIRONMENT_DEFINITIONS, ENVIRONMENT_SEQUENCE } from "../config/environments.js";
+import { ENVIRONMENT_DEFINITIONS, ENVIRONMENT_SEQUENCE } from "../config/environments.js";
 import { canvas } from "../environment/canvas.js";
 import { clearResourcePickups } from "./resources.js";
 
@@ -137,6 +137,11 @@ function initializeEnvironmentControls() {
   controlsInitialized = true;
 }
 
+
+function refreshEnvironment() {
+  notifyListeners();
+}
+
 export {
   getEnvironmentDefinition,
   getEnvironmentId,
@@ -151,5 +156,6 @@ export {
   setEnvironment,
   cycleEnvironment,
   onEnvironmentChange,
-  initializeEnvironmentControls
+  initializeEnvironmentControls,
+  refreshEnvironment
 };

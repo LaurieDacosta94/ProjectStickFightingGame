@@ -1,4 +1,5 @@
 ﻿import { context } from "../../environment/canvas.js";
+import { isWithinView, recordVisibility } from "./culling.js";
 import { getStructures, getBuildState, getBlueprintByIndex } from "../../state/buildings.js";
 import { calculatePreview } from "../building/index.js";
 import { clamp } from "../utils/math.js";
@@ -53,6 +54,12 @@ function drawBuildings() {
     return;
   }
   for (const structure of structures) {
+    const halfWidth = ((structure.width ?? 120) * 0.5) + 40;
+    const culled = !isWithinView(structure.x, halfWidth, 320);
+    recordVisibility("building", culled);
+    if (culled) {
+      continue;
+    }
     drawStructure(structure);
   }
 }

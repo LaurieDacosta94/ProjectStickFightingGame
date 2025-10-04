@@ -211,6 +211,35 @@ function refillWeaponAmmo(weaponId) {
   entry.reloading = false;
   entry.reloadTimer = 0;
 }
+function setWeaponInfiniteAmmo(weaponId) {
+  const entry = ensureAmmoEntry(weaponId);
+  if (!entry) {
+    return;
+  }
+  entry.capacity = Number.POSITIVE_INFINITY;
+  entry.magazine = Number.POSITIVE_INFINITY;
+  entry.reserve = Number.POSITIVE_INFINITY;
+  entry.reloading = false;
+  entry.reloadTimer = 0;
+  if (stickman.equippedWeaponId === weaponId) {
+    stickman.reloading = false;
+  }
+}
+
+function resetWeaponAmmo(weaponId) {
+  if (!weaponId) {
+    return;
+  }
+  ammoState.delete(weaponId);
+  ensureAmmoEntry(weaponId);
+}
+
+function resetAllWeaponAmmo() {
+  ammoState.clear();
+  if (stickman.equippedWeaponId) {
+    ensureAmmoEntry(stickman.equippedWeaponId);
+  }
+}
 
 export {
   ensureAmmoEntry,
@@ -220,6 +249,12 @@ export {
   cancelReload,
   registerShot,
   updateAmmoTimers,
-  refillWeaponAmmo
+  refillWeaponAmmo,
+  setWeaponInfiniteAmmo,
+  resetWeaponAmmo,
+  resetAllWeaponAmmo
 };
+
+
+
 

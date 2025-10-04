@@ -1,7 +1,27 @@
-import { canvas, GROUND_Y } from "../environment/canvas.js";
+﻿import { canvas, GROUND_Y } from "../environment/canvas.js";
 import { POSES } from "../config/constants.js";
 import { SQUAD_COMMANDS } from "../config/squad.js";
 import { getEnvironmentSpawnSettings, onEnvironmentChange, getEnvironmentWidth } from "./environment.js";
+
+function createAimState(facing = 1, smoothing = 12) {
+  const baseAngle = facing >= 0 ? 0 : Math.PI;
+  const vx = Math.cos(baseAngle);
+  const vy = Math.sin(baseAngle);
+  return {
+    angle: baseAngle,
+    targetAngle: baseAngle,
+    vectorX: vx,
+    vectorY: vy,
+    magnitude: 1,
+    anchorX: 0,
+    anchorY: 0,
+    targetX: vx,
+    targetY: vy,
+    smoothing,
+    active: false,
+    lastUpdated: 0
+  };
+}
 
 function getTotalHeight(pose) {
   return pose.headRadius * 2 + pose.bodyLength + pose.legLength;
@@ -11,6 +31,9 @@ function createGruntEnemy(spawnX, options = {}) {
   const spawnSettings = getEnvironmentSpawnSettings();
   const predefined = Array.isArray(spawnSettings?.enemies) ? spawnSettings.enemies : [];
   const resolvedX = typeof spawnX === "number" ? spawnX : predefined[0] ?? getEnvironmentWidth() * 0.25;
+  const baseMaxHealth = 120;
+  const baseAttackDamage = 12;
+  const baseMoveSpeed = 160;
   const enemyHeight = 118;
   const spawnY = spawnSettings?.enemyY ?? GROUND_Y - enemyHeight;
   const contextTag = options.context ?? "sandbox";
@@ -36,15 +59,20 @@ function createGruntEnemy(spawnX, options = {}) {
     patrolRange: { min: resolvedX - 100, max: resolvedX + 220 },
     aggressionRange: 360,
     attackRange: 86,
-    moveSpeed: 160,
-    health: 120,
-    maxHealth: 120,
+    moveSpeed: baseMoveSpeed,
+    health: baseMaxHealth,
+    maxHealth: baseMaxHealth,
     attackCooldown: 0,
     attackWindup: 0,
     attackActive: 0,
-    attackDamage: 12,
+    attackDamage: baseAttackDamage,
     attackKnockback: 120,
     attackLaunch: -80,
+    baseStats: {
+      maxHealth: baseMaxHealth,
+      attackDamage: baseAttackDamage,
+      moveSpeed: baseMoveSpeed
+    },
     flashTimer: 0,
     shakeTimer: 0,
     shakeMagnitude: 0,
@@ -56,6 +84,7 @@ function createGruntEnemy(spawnX, options = {}) {
     spawnContext: contextTag,
     autoRespawn,
     spawnSide,
+    aim: createAimState(initialFacing, 12),
     active: true
   };
 }
@@ -80,6 +109,7 @@ function createSquadmate(offsetX = 0, name = "Ally", baseX = getEnvironmentWidth
     highlight: 0,
     structureShieldTimer: 0,
     structureShieldStrength: 0,
+    aim: createAimState(1, 18),
     roleIndex: 0
   };
 }
@@ -121,6 +151,7 @@ const stickman = {
   invulnerability: 0,
   deadTimer: 0,
   throwCooldown: 0,
+  fireCooldown: 0,
   gadgetCooldown: 0,
   reloading: false,
   stunTimer: 0,
@@ -129,6 +160,7 @@ const stickman = {
   smokeSlowStrength: 1,
   structureShieldTimer: 0,
   structureShieldStrength: 0,
+  aim: createAimState(1, 22),
   equippedWeaponId: "combatFists"
 };
 
@@ -346,6 +378,7 @@ export {
   removeSandboxEnemies,
   restoreSandboxEnemies
 };
+
 
 
 

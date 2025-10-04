@@ -1,19 +1,24 @@
-# Placeholder Audio Notes
+﻿# Audio System Notes
 
 ## Overview
-- initializePlaceholderAudio (src/core/audio/placeholder.js) listens to weapon/shield/throwable events and plays short Web Audio tones so timing can be validated before final assets arrive.
-- Audio context is resumed on first pointer/keyboard input; browsers without Web Audio simply skip playback.
-- Event-to-tone mapping is kept in EVENT_SOUND_MAP, keeping future sample swaps centralized.
+- initializeAudioSystem (src/core/audio/index.js) wires a Web Audio graph with master, SFX, and music busses, then seeds synthetic sound buffers for common gameplay events.
+- The engine resumes the context on the first user gesture, spins up an ambient pad/pulse/bass soundtrack, and throttles repeated cues via simple cooldown tracking.
+- SOUND_DEFINITIONS and EVENT_SOUND_MAP describe how events map to generated buffers, playback-rate variance, pan spread, and soundtrack intensity bumps.
 
-## Current Event Map
-- weapon:muzzle-flash / weapon:shot-fired: rapid, high-frequency chirps to mark firing cadence.
-- weapon:reload-start / weapon:reload-finish: mid-frequency triangles bookend the reload window.
-- weapon:recoil-kick: softer sine chirp, scaled by recoil magnitude so heavy kicks stand out.
-- shield:hit / shield:shatter / shield:end: low-frequency pulses communicate absorption versus collapse.
-- throwable:explosion / throwable:flash-burst: quick boom/flare stubs so grenade detonation timing is audible.
-- throwable:smoke-detonate / throwable:smoke-dissipate: soft whoosh + fade to match the smoke cloud lifecycle.
+## Event Palette
+- **Fire / muzzle** – layered noise plus harmonic clicks with subtle stereo variation.
+- **Reload** – paired confirmation beeps (start/finish) so weapon state is audible even with eyes off the HUD.
+- **Recoil** – dampened low-frequency thumps scaled by cadence to distinguish cannons from pistols.
+- **Grenades & explosives** – roaring low-end booms, bright flash streaks, and breathy smoke pulses for lifecycle cues.
+- **Shields** – shimmering impact glissandos, crystalline shatters, and descending release tones when the bubble expires.
+- **Environment & debris** – light chimes on biome swaps and gritty bursts when destructible props crumble.
 
-## Next Steps
-- Replace tone synthesis with queued sample playback once asset pack is ready.
-- Allow per-weapon overrides (e.g., SMG burst riff, pistol snap) via weapon metadata.
-- Pipe the same event feed into the particle system so muzzle flashes and shield impacts share timing with audio cues.
+## Soundtrack
+- Procedural pad (warm chords), pulse (percussive accents), and bass drones loop via buffer sources tied to the music buss.
+- Background gain idles near 0.28 and eases toward 	argetMusicLevel; combat events call umpMusicIntensity to push the mix toward 0.85 before decaying.
+- A low-frequency update loop adjusts the music gain every ~220 ms so ambience reacts without touching the main game loop.
+
+## Integration Notes
+- All playback routes through playSound, so future sample swaps can replace generated buffers without reworking event plumbing.
+- setMasterVolume, setSfxVolume, and setMusicVolume expose runtime controls for menus or accessibility settings.
+- Callers only need initializeAudioSystem() from main.js; the module guards unsupported browsers by no-oping when Web Audio is unavailable.

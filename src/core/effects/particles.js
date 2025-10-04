@@ -5,6 +5,27 @@ const particles = [];
 const rings = [];
 let listenersAttached = false;
 
+const BLOOD_COLORS = ["#8b0f14", "#b11217", "#d92c32", "#f0483c"];
+const BLOOD_MIST_COLORS = ["rgba(240, 72, 60, 0.55)", "rgba(217, 44, 50, 0.45)"];
+const SPARK_COLORS = ["#ffd36b", "#ffeaa1", "#ff9b45"];
+const DUST_COLOR_MAP = {
+  sand: ["#cbb188", "#a17b53", "#e4c9a2"],
+  stone: ["#d6d8df", "#adb4c1", "#8b929f"],
+  steel: ["#94aaff", "#c5d2ff", "#6f7ab0"],
+  default: ["#c8b7a1", "#9c8366"]
+};
+
+function pickRandom(values) {
+  return values[Math.floor(Math.random() * values.length)] ?? values[0];
+}
+
+function resolvePalette(name, fallback = DUST_COLOR_MAP.default) {
+  if (!name) {
+    return fallback;
+  }
+  return DUST_COLOR_MAP[name] ?? fallback;
+}
+
 function spawnRingBurst(options = {}) {
   const ttl = options.ttl ?? 0.4;
   const ring = {
@@ -19,6 +40,118 @@ function spawnRingBurst(options = {}) {
   };
   rings.push(ring);
   return ring;
+}
+
+function spawnBloodSpray(detail = {}) {
+  const baseX = detail.x ?? 0;
+  const baseY = detail.y ?? 0;
+  const facing = detail.facing ?? 1;
+  const intensity = clamp(detail.intensity ?? ((detail.damage ?? 0) / Math.max(1, detail.maxDamage ?? 60)), 0, 1);
+  const amount = Math.max(4, Math.round(detail.amount ?? (8 + intensity * 10)));
+  const speedBase = detail.speed ?? (220 + intensity * 140);
+  const gravity = detail.gravity ?? 980;
+  for (let i = 0; i < amount; i += 1) {
+    const spread = detail.spread ?? Math.PI * 0.55;
+    const angle = (Math.random() * spread - spread * 0.5) + (facing >= 0 ? 0 : Math.PI);
+    const speed = speedBase * (0.55 + Math.random() * 0.9);
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed - (80 + intensity * 140);
+    const ttl = 0.45 + Math.random() * 0.25;
+    particles.push({
+      type: "blood",
+      x: baseX,
+      y: baseY,
+      vx,
+      vy,
+      ttl,
+      maxTtl: ttl,
+      radius: 3 + Math.random() * 2.6,
+      color: pickRandom(BLOOD_COLORS),
+      gravity
+    });
+  }
+  const mistCount = Math.max(2, Math.round(amount * 0.35));
+  for (let i = 0; i < mistCount; i += 1) {
+    const dir = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 110;
+    const ttl = 0.35 + Math.random() * 0.3;
+    particles.push({
+      type: "bloodMist",
+      x: baseX + Math.cos(dir) * 6,
+      y: baseY + Math.sin(dir) * 4,
+      vx: Math.cos(dir) * speed * 0.4,
+      vy: Math.sin(dir) * speed * 0.2 - 40,
+      ttl,
+      maxTtl: ttl,
+      radius: 12 + Math.random() * 10,
+      color: pickRandom(BLOOD_MIST_COLORS)
+    });
+  }
+}
+
+function spawnImpactSparks(detail = {}) {
+  const baseX = detail.x ?? 0;
+  const baseY = detail.y ?? 0;
+  const amount = Math.max(4, Math.round(detail.amount ?? 8));
+  const speedBase = detail.speed ?? 260;
+  const palette = Array.isArray(detail.palette) && detail.palette.length > 0 ? detail.palette : SPARK_COLORS;
+  for (let i = 0; i < amount; i += 1) {
+    const angle = (detail.angle ?? 0) + (Math.random() - 0.5) * (detail.spread ?? Math.PI * 0.9);
+    const speed = speedBase * (0.5 + Math.random() * 0.8);
+    const ttl = 0.18 + Math.random() * 0.18;
+    particles.push({
+      type: "spark",
+      x: baseX,
+      y: baseY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      ttl,
+      maxTtl: ttl,
+      radius: 2 + Math.random() * 2,
+      color: pickRandom(palette)
+    });
+  }
+}
+
+function spawnImpactDust(detail = {}) {
+  const baseX = detail.x ?? 0;
+  const baseY = detail.y ?? 0;
+  const amount = Math.max(4, Math.round(detail.amount ?? 9));
+  const palette = Array.isArray(detail.palette) && detail.palette.length > 0
+    ? detail.palette
+    : resolvePalette(detail.paletteName, DUST_COLOR_MAP.default);
+  const baseAngle = detail.angle ?? (Math.PI * 1.5);
+  const spread = detail.spread ?? Math.PI * 0.9;
+  const speedBase = detail.speed ?? 160;
+  for (let i = 0; i < amount; i += 1) {
+    const angle = baseAngle + (Math.random() - 0.5) * spread;
+    const speed = speedBase * (0.5 + Math.random() * 0.9);
+    const ttl = 0.6 + Math.random() * 0.3;
+    particles.push({
+      type: "dust",
+      x: baseX,
+      y: baseY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 40,
+      ttl,
+      maxTtl: ttl,
+      radius: (detail.radius ?? 12) * (0.5 + Math.random() * 0.6),
+      color: pickRandom(palette)
+    });
+  }
+}
+
+function spawnGroundDust(detail = {}) {
+  spawnImpactDust({
+    x: detail.x,
+    y: detail.y,
+    amount: detail.amount ?? 8,
+    paletteName: detail.paletteName ?? "sand",
+    speed: detail.speed ?? 140,
+    spread: detail.spread ?? Math.PI * 1.1,
+    angle: detail.angle ?? (Math.PI * 1.4),
+    radius: detail.radius ?? 14
+  });
 }
 
 function spawnMuzzleParticles(detail = {}) {
@@ -306,7 +439,16 @@ function updateParticles(delta) {
     const life = clamp(p.ttl / p.maxTtl, 0, 1);
     p.x += p.vx * delta;
     p.y += p.vy * delta;
-    if (p.type === "shield") {
+    if (p.type === "blood") {
+      p.vy += (p.gravity ?? 980) * delta;
+      p.vx *= 0.82;
+      p.vy *= 0.9;
+      p.radius *= 0.94;
+    } else if (p.type === "bloodMist") {
+      p.vx *= 0.9;
+      p.vy *= 0.92;
+      p.radius *= 1.02;
+    } else if (p.type === "shield") {
       p.vx *= 0.88;
       p.vy *= 0.88;
       p.radius *= 0.96 + life * 0.04;
@@ -317,11 +459,19 @@ function updateParticles(delta) {
     } else if (p.type === "ember") {
       p.vx *= 0.94;
       p.vy *= 0.94;
+    } else if (p.type === "spark") {
+      p.vx *= 0.88;
+      p.vy = (p.vy ?? 0) * 0.9 + 160 * delta;
+      p.radius *= 0.86;
     } else if (p.type === "debris") {
       p.vy += 520 * delta;
       p.vx *= 0.88;
       p.vy *= 0.9;
       p.radius *= 0.95;
+    } else if (p.type === "dust") {
+      p.vx *= 0.82;
+      p.vy = (p.vy ?? 0) * 0.9 + 240 * delta;
+      p.radius *= 0.96;
     } else if (p.type === "flash") {
       p.vx *= 0.8;
       p.vy *= 0.8;
@@ -365,8 +515,16 @@ function drawParticles() {
     let alpha = clamp(life, 0, 1);
     if (particle.type === "smoke") {
       alpha *= 0.55;
+    } else if (particle.type === "blood") {
+      alpha = 0.45 + alpha * 0.45;
+    } else if (particle.type === "bloodMist") {
+      alpha = 0.25 + alpha * 0.4;
     } else if (particle.type === "flash") {
       alpha = 0.35 + alpha * 0.65;
+    } else if (particle.type === "spark") {
+      alpha = 0.35 + alpha * 0.55;
+    } else if (particle.type === "dust") {
+      alpha = 0.3 + alpha * 0.4;
     } else if (particle.type === "debris") {
       alpha = 0.5 + alpha * 0.5;
     }
@@ -375,6 +533,14 @@ function drawParticles() {
     let sizeFactor = life;
     if (particle.type === "smoke") {
       sizeFactor = 1;
+    } else if (particle.type === "blood") {
+      sizeFactor = 0.7 + life * 0.4;
+    } else if (particle.type === "bloodMist") {
+      sizeFactor = 1;
+    } else if (particle.type === "spark") {
+      sizeFactor = 0.5 + life * 0.5;
+    } else if (particle.type === "dust") {
+      sizeFactor = 0.8 + life * 0.3;
     } else if (particle.type === "debris") {
       sizeFactor = 0.6 + life * 0.4;
     }
@@ -408,4 +574,6 @@ function drawParticles() {
 
 
 
-export { spawnExplosionParticles, spawnExplosionDebris, spawnDestructibleHitParticles, spawnSmokePuffs, spawnSmokeDissipateRing, spawnRingBurst, updateParticles, drawParticles };
+export { spawnBloodSpray, spawnImpactSparks, spawnImpactDust, spawnGroundDust, spawnExplosionParticles, spawnExplosionDebris, spawnDestructibleHitParticles, spawnSmokePuffs, spawnSmokeDissipateRing, spawnRingBurst, updateParticles, drawParticles };
+
+

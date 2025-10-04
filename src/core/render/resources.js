@@ -1,4 +1,5 @@
 ﻿import { context } from "../../environment/canvas.js";
+import { isWithinView, recordVisibility } from "./culling.js";
 import { getResourceState } from "../../state/resources.js";
 import { clamp } from "../utils/math.js";
 
@@ -9,6 +10,11 @@ function drawSalvagePickups() {
   }
   context.save();
   for (const pickup of state.pickups) {
+    const culled = !isWithinView(pickup.x, pickup.radius ?? 18, 200);
+    recordVisibility("resource", culled);
+    if (culled) {
+      continue;
+    }
     const lifeRatio = pickup.maxTtl > 0 ? clamp(pickup.ttl / pickup.maxTtl, 0, 1) : 1;
     context.fillStyle = `rgba(150, 255, 200, ${0.35 + lifeRatio * 0.45})`;
     context.beginPath();

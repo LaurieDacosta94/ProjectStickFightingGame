@@ -33,19 +33,40 @@ function throwEquippedWeapon() {
   }
 
   const config = weapon.throwable ?? {};
-  const facing = stickman.facing || 1;
-  const arc = config.arcVelocity ?? { vx: 260, vy: -420 };
+  const aim = stickman.aim ?? null;
+  const rawDirX = Number.isFinite(aim?.vectorX) ? aim.vectorX : (stickman.facing || 1);
+  const rawDirY = Number.isFinite(aim?.vectorY) ? aim.vectorY : 0;
+  const normLength = Math.hypot(rawDirX, rawDirY) || 1;
+  const dirX = rawDirX / normLength;
+  const dirY = rawDirY / normLength;
+  const perpX = -dirY;
+  const perpY = dirX;
+
+  const anchorX = Number.isFinite(aim?.anchorX) ? aim.anchorX : stickman.x;
+  const anchorY = Number.isFinite(aim?.anchorY) ? aim.anchorY : stickman.y + 24;
   const spawnOffset = config.spawnOffset ?? { x: 22, y: 12 };
+  const forwardOffset = spawnOffset.x ?? 22;
+  const verticalOffset = spawnOffset.y ?? 12;
+  const lateralOffset = spawnOffset.side ?? 0;
+
   const envWidth = getEnvironmentWidth();
+  const spawnX = clamp(anchorX + dirX * forwardOffset + perpX * lateralOffset, 40, envWidth - 40);
+  const spawnY = anchorY + dirY * forwardOffset + perpY * lateralOffset + verticalOffset;
+
+  const arc = config.arcVelocity ?? { vx: 260, vy: -420 };
+  const forwardSpeed = arc.vx ?? 260;
+  const verticalBoost = arc.vy ?? -420;
+  const vx = dirX * forwardSpeed + perpX * (arc.side ?? 0);
+  const vy = dirY * forwardSpeed + perpY * (arc.side ?? 0) + verticalBoost;
 
   stickman.throwCooldown = config.cooldownSeconds ?? 0.9;
 
   const grenade = {
     id: `grenade-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    x: clamp(stickman.x + facing * (spawnOffset.x ?? 22), 40, envWidth - 40),
-    y: stickman.y + (spawnOffset.y ?? 12),
-    vx: facing * (arc.vx ?? 260),
-    vy: arc.vy ?? -420,
+    x: spawnX,
+    y: spawnY,
+    vx,
+    vy,
     radius: config.radius ?? 16,
     fuse: config.fuseSeconds ?? 1.5,
     maxFuse: config.fuseSeconds ?? 1.5,
